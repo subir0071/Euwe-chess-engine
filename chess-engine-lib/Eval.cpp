@@ -585,61 +585,6 @@ FORCE_INLINE void evaluatePawnsForSide(
     result.control |= getPawnControlledSquares(ownPawns, side);
 }
 
-template <bool CalcJacobians>
-[[nodiscard]] FORCE_INLINE EvalCalcT evaluateKingSwarming(
-        const Evaluator::EvalCalcParams& params,
-        const GameState& gameState,
-        const Side swarmingSide,
-        const EvalCalcT swarmingMaterial,
-        const EvalCalcT defendingMaterial,
-        const ParamGradient<CalcJacobians>& swarmingMaterialGradient,
-        const ParamGradient<CalcJacobians>& defendingMaterialGradient,
-        ParamGradient<CalcJacobians>& gradient) {
-    if (defendingMaterial >= swarmingMaterial) {
-        return 0;
-    }
-
-    const EvalCalcT rookValue = params.pieceValues[(int)Piece::Rook].late;
-
-    const float materialAdvantageFactor =
-            min((float)(swarmingMaterial - defendingMaterial) / (float)rookValue, 1.f);
-
-    ParamGradient<CalcJacobians> materialAdvantageFactorGradient;
-    if constexpr (CalcJacobians) {
-        if (materialAdvantageFactor < 1.f) {
-            const ParamGradient<CalcJacobians> numGradient =
-                    swarmingMaterialGradient - defendingMaterialGradient;
-            ParamGradient<CalcJacobians> denGradient = zeroGradient<CalcJacobians>();
-            denGradient[getParamIndex(params, params.pieceValues[(int)Piece::Rook].late)] = 1;
-
-            const EvalCalcT num = swarmingMaterial - defendingMaterial;
-            const EvalCalcT den = rookValue;
-
-            materialAdvantageFactorGradient = (numGradient * den - num * denGradient) / (den * den);
-        } else {
-            materialAdvantageFactorGradient = zeroGradient<CalcJacobians>();
-        }
-    }
-
-    const BoardPosition swarmingKingPosition =
-            getFirstSetPosition(gameState.getPieceBitBoard(swarmingSide, Piece::King));
-    const BoardPosition defendingKingPosition =
-            getFirstSetPosition(gameState.getPieceBitBoard(nextSide(swarmingSide), Piece::King));
-
-    const EvalCalcT defendingKingDistanceToCenter =
-            manhattanDistanceToCenter(defendingKingPosition);
-
-    const EvalCalcT kingDistance = manhattanDistance(swarmingKingPosition, defendingKingPosition);
-
-    const EvalCalcT swarmingValue = defendingKingDistanceToCenter + (14 - kingDistance);
-
-    if constexpr (CalcJacobians) {
-        gradient += materialAdvantageFactorGradient * swarmingValue * 10.f;
-    }
-
-    return (EvalCalcT)(materialAdvantageFactor * swarmingValue * 10.f);
-}
-
 [[nodiscard]] FORCE_INLINE ParamGradient<true> getMaxPhaseMaterialGradient(
         const EvalParams& params) {
     /*
@@ -802,60 +747,6 @@ template <bool CalcJacobians>
 }
 
 template <bool CalcJacobians>
-[[nodiscard]] FORCE_INLINE std::tuple<EvalCalcT, ParamGradient<CalcJacobians>>
-evalAndCalcKingSwarming(
-        const Evaluator::EvalCalcParams& params,
-        const GameState& gameState,
-        const PiecePositionEvaluation& whitePiecePositionEval,
-        const PiecePositionEvaluation& blackPiecePositionEval,
-        const PiecePositionEvaluationJacobians<CalcJacobians>& whitePiecePositionJacobians,
-        const PiecePositionEvaluationJacobians<CalcJacobians>& blackPiecePositionJacobians,
-        const float lateFactor,
-        const ParamGradient<CalcJacobians>& earlyFactorGradient) {
-    ParamGradient<CalcJacobians> whiteLateMaterialGradient;
-    ParamGradient<CalcJacobians> blackLateMaterialGradient;
-    if constexpr (CalcJacobians) {
-        whiteLateMaterialGradient = whitePiecePositionJacobians.material.late;
-        blackLateMaterialGradient = blackPiecePositionJacobians.material.late;
-    }
-
-    ParamGradient<CalcJacobians> whiteSwarmingGradient = zeroGradient<CalcJacobians>();
-    ParamGradient<CalcJacobians> blackSwarmingGradient = zeroGradient<CalcJacobians>();
-
-    const EvalCalcT whiteSwarmingValue = evaluateKingSwarming<CalcJacobians>(
-            params,
-            gameState,
-            Side::White,
-            whitePiecePositionEval.material.late,
-            blackPiecePositionEval.material.late,
-            whiteLateMaterialGradient,
-            blackLateMaterialGradient,
-            whiteSwarmingGradient);
-    const EvalCalcT blackSwarmingValue = evaluateKingSwarming<CalcJacobians>(
-            params,
-            gameState,
-            Side::Black,
-            blackPiecePositionEval.material.late,
-            whitePiecePositionEval.material.late,
-            blackLateMaterialGradient,
-            whiteLateMaterialGradient,
-            blackSwarmingGradient);
-    const EvalCalcT swarmingEval = lateFactor * (whiteSwarmingValue - blackSwarmingValue);
-
-    ParamGradient<CalcJacobians> swarmingGradient;
-    if constexpr (CalcJacobians) {
-        const EvalCalcT endSwarmingValue = whiteSwarmingValue - blackSwarmingValue;
-        const ParamGradient<CalcJacobians> endSwarmingGradient =
-                whiteSwarmingGradient - blackSwarmingGradient;
-
-        swarmingGradient =
-                endSwarmingGradient * lateFactor - earlyFactorGradient * endSwarmingValue;
-    }
-
-    return {swarmingEval, swarmingGradient};
-}
-
-template <bool CalcJacobians>
 [[nodiscard]] FORCE_INLINE EvalCalcT evaluateForWhite(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
@@ -929,20 +820,10 @@ template <bool CalcJacobians>
             lateFactor,
             earlyFactorGradient);
 
-    const auto [swarmingEval, swarmingGradient] = evalAndCalcKingSwarming(
-            params,
-            gameState,
-            whitePiecePositionEval,
-            blackPiecePositionEval,
-            whitePiecePositionJacobians,
-            blackPiecePositionJacobians,
-            lateFactor,
-            earlyFactorGradient);
-
-    const EvalCalcT eval = materialEval + positionEval + swarmingEval;
+    const EvalCalcT eval = materialEval + positionEval;
 
     if constexpr (CalcJacobians) {
-        whiteEvalGradient = materialGradient + positionGradient + swarmingGradient;
+        whiteEvalGradient = materialGradient + positionGradient;
     }
 
     return eval;

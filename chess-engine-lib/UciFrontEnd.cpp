@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name retune2-attack-defend");
+    writeUci("id name no-king-swarming");
     writeUci("id author Joost Houben");
 
     writeOptions();
