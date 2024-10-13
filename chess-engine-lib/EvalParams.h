@@ -39,6 +39,7 @@ struct EvalParams {
 
     std::array<TaperedTerm, 9> knightPawnAdjustment;
     std::array<TaperedTerm, 9> rookPawnAdjustment;
+    std::array<TaperedTerm, 9> queenPawnAdjustment;
 
     TaperedTerm kingVirtualMobilityPenalty;
 

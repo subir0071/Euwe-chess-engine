@@ -3,6 +3,8 @@
 
 #include "MyGTest.h"
 
+#include <memory>
+
 namespace EvalJacobiansTests {
 
 namespace {
@@ -17,8 +19,8 @@ double numericDerivative(
         EvalParamArray xPrime = x;
         xPrime[i] += eps;
 
-        const Evaluator evaluator(evalParamsFromArray(xPrime));
-        yPlus = evaluator.evaluateRaw(gameState);
+        const auto evaluator = std::make_unique<Evaluator>(evalParamsFromArray(xPrime));
+        yPlus                = evaluator->evaluateRaw(gameState);
     }
 
     EvalCalcT yMinus;
@@ -26,8 +28,8 @@ double numericDerivative(
         EvalParamArray xPrime = x;
         xPrime[i] -= eps;
 
-        const Evaluator evaluator(evalParamsFromArray(xPrime));
-        yMinus = evaluator.evaluateRaw(gameState);
+        const auto evaluator = std::make_unique<Evaluator>(evalParamsFromArray(xPrime));
+        yMinus               = evaluator->evaluateRaw(gameState);
     }
 
     return (yPlus - yMinus) / (2 * eps);
@@ -43,14 +45,18 @@ TEST(EvalJacobiansTests, TestJacobians) {
             // position 3
             GameState::fromFen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1"),
             // position 4
-            GameState::fromFen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1")};
+            GameState::fromFen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"),
+            // King and bishop vs king
+            GameState::fromFen("8/8/8/1k6/5K2/4B3/8/8 w - - 0 1"),
+    };
 
     const EvalParams defaultParams         = EvalParams::getDefaultParams();
     const EvalParamArray defaultParamArray = evalParamsToArray(defaultParams);
 
+    const auto defaultEvaluator = std::make_unique<Evaluator>(defaultParams);
+
     for (const GameState& gameState : gameStates) {
-        const EvalWithGradient evalWithGradient =
-                Evaluator(defaultParams).evaluateWithGradient(gameState);
+        const EvalWithGradient evalWithGradient = defaultEvaluator->evaluateWithGradient(gameState);
 
         for (std::size_t paramIdx = 0; paramIdx < kNumEvalParams; ++paramIdx) {
             const EvalCalcT defaultValue = defaultParamArray[paramIdx];

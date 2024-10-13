@@ -413,6 +413,13 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     jacobians.position,
                     tropism);
 
+            updateTaperedTerm(
+                    params,
+                    params.queenPawnAdjustment[numOwnPawns],
+                    result.material,
+                    jacobians.material,
+                    1);
+
             updateMobilityEvaluation<CalcJacobians>(
                     params, Piece::Queen, position, anyPiece, ownOccupancy, result, jacobians);
         }
