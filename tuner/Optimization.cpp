@@ -102,6 +102,11 @@ std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
         // late eval terms: changing the phase material value of the king is akin to shifting the late
         // eval terms along the linear path to the early eval terms.
         setConstant(params.phaseMaterialValues[(int)Piece::King]);
+
+        // Fix king piece-square tables to help convergence of phase material values.
+        for (int squareIdx = 0; squareIdx < kSquares; ++squareIdx) {
+            setTaperedTermConstant(params.pieceSquareTablesWhite[(int)Piece::King][squareIdx]);
+        }
     }
 
     // Fix piece values to avoid gauge freedoms with the piece-square tables.
@@ -149,12 +154,13 @@ void addResiduals(
         double& scaleParam,
         std::array<double, kNumEvalParams>& paramsDouble,
         const std::vector<ScoredPosition>& scoredPositions,
+        const bool fixPhaseValues,
         ceres::Problem& problem) {
     problem.AddParameterBlock(&scaleParam, 1);
     problem.AddParameterBlock(paramsDouble.data(), kNumEvalParams);
 
     const auto constantParamIdxs = std::make_shared<std::vector<int>>();
-    *constantParamIdxs           = getConstantParamIdxs(/*fixPhaseValues*/ true);
+    *constantParamIdxs           = getConstantParamIdxs(fixPhaseValues);
 
     for (const auto& scoredPosition : scoredPositions) {
         ceres::CostFunction* costFunction = new EvalCostFunctor(scoredPosition, constantParamIdxs);
@@ -188,11 +194,12 @@ void solve(ceres::Problem& problem) {
 
 void optimize(
         std::array<double, kNumEvalParams>& paramsDouble,
-        const std::vector<ScoredPosition>& scoredPositions) {
+        const std::vector<ScoredPosition>& scoredPositions,
+        const bool fixPhaseValues) {
     double scaleParam = 400.;
 
     ceres::Problem problem;
-    addResiduals(scaleParam, paramsDouble, scoredPositions, problem);
+    addResiduals(scaleParam, paramsDouble, scoredPositions, fixPhaseValues, problem);
 
     problem.SetParameterBlockConstant(paramsDouble.data());
     solve(problem);

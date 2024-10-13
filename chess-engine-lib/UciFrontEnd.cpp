@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name no-king-swarming");
+    writeUci("id name tune2-phase");
     writeUci("id author Joost Houben");
 
     writeOptions();
