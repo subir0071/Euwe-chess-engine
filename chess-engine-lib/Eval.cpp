@@ -413,12 +413,13 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     jacobians.position,
                     tropism);
 
+            const int pawnAdjustmentWeight = numOwnPawns - 4;
             updateTaperedTerm(
                     params,
-                    params.queenPawnAdjustment[numOwnPawns],
+                    params.queenPawnAdjustment,
                     result.material,
                     jacobians.material,
-                    1);
+                    pawnAdjustmentWeight);
 
             updateMobilityEvaluation<CalcJacobians>(
                     params, Piece::Queen, position, anyPiece, ownOccupancy, result, jacobians);

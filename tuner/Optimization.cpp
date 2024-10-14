@@ -122,7 +122,6 @@ std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
     setTaperedTermConstant(params.bishopPawnSameColorBonus[4]);
     setTaperedTermConstant(params.knightPawnAdjustment[4]);
     setTaperedTermConstant(params.rookPawnAdjustment[4]);
-    setTaperedTermConstant(params.queenPawnAdjustment[4]);
 
     // Fix unused values
 
