@@ -249,7 +249,8 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
     const BitBoard anyPiece =
             gameState.getOccupancy().ownPiece | gameState.getOccupancy().enemyPiece;
 
-    const int numOwnPawns = popCount(ownPawns);
+    const int numOwnPawns          = popCount(ownPawns);
+    const int pawnAdjustmentWeight = numOwnPawns - 4;
 
     const BoardPosition enemyKingPosition =
             getFirstSetPosition(gameState.getPieceBitBoard(nextSide(side), Piece::King));
@@ -281,10 +282,10 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateTaperedTerm(
                     params,
-                    params.knightPawnAdjustment[numOwnPawns],
+                    params.knightPawnAdjustment,
                     result.material,
                     jacobians.material,
-                    1);
+                    pawnAdjustmentWeight);
 
             updateMobilityEvaluation<CalcJacobians>(
                     params, Piece::Knight, position, anyPiece, ownOccupancy, result, jacobians);
@@ -299,7 +300,7 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                 popCount(ownPawns & kDarkSquareBitBoard),
                 popCount(ownPawns & kLightSquareBitBoard),
         };
-        const std::array<int, 2> badBishopIndex = {
+        const std::array<int, 2> pawnsOnSameColorWeight = {
                 ownPawnsPerSquareColor[0] + (8 - numOwnPawns) / 2,
                 ownPawnsPerSquareColor[1] + (8 - numOwnPawns) / 2,
         };
@@ -317,10 +318,10 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateTaperedTerm(
                     params,
-                    params.bishopPawnSameColorBonus[badBishopIndex[squareColor]],
+                    params.bishopPawnSameColorAdjustment,
                     result.position,
                     jacobians.position,
-                    1);
+                    pawnsOnSameColorWeight[squareColor]);
 
             const EvalCalcT kingDistance = bishopDistance(position, enemyKingPosition);
             const EvalCalcT tropism      = 14 - kingDistance;
@@ -384,10 +385,10 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateTaperedTerm(
                     params,
-                    params.rookPawnAdjustment[numOwnPawns],
+                    params.rookPawnAdjustment,
                     result.material,
                     jacobians.material,
-                    1);
+                    pawnAdjustmentWeight);
 
             updateMobilityEvaluation<CalcJacobians>(
                     params, Piece::Rook, position, anyPiece, ownOccupancy, result, jacobians);
@@ -413,7 +414,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     jacobians.position,
                     tropism);
 
-            const int pawnAdjustmentWeight = numOwnPawns - 4;
             updateTaperedTerm(
                     params,
                     params.queenPawnAdjustment,
