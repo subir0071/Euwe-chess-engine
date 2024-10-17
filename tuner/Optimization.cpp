@@ -102,11 +102,6 @@ std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
         // late eval terms: changing the phase material value of the king is akin to shifting the late
         // eval terms along the linear path to the early eval terms.
         setConstant(params.phaseMaterialValues[(int)Piece::King]);
-
-        // Fix king piece-square tables to help convergence of phase material values.
-        for (int squareIdx = 0; squareIdx < kSquares; ++squareIdx) {
-            setTaperedTermConstant(params.pieceSquareTablesWhite[(int)Piece::King][squareIdx]);
-        }
     }
 
     // Fix piece values to avoid gauge freedoms with the piece-square tables.
