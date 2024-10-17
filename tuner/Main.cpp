@@ -16,6 +16,8 @@
 #include <ranges>
 #include <stdexcept>
 
+#include <cstdlib>
+
 namespace {
 
 std::array<double, kNumEvalParams> getInitialParams() {
@@ -68,6 +70,8 @@ std::vector<std::pair<std::filesystem::path, int>> parseArgs(int argc, char** ar
 }  // namespace
 
 int main(int argc, char** argv) {
+    std::srand(42);
+
     const auto pathsAndDropOutRates = parseArgs(argc, argv);
 
     std::array<double, kNumEvalParams> paramsDouble = getInitialParams();

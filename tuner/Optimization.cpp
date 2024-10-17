@@ -8,6 +8,8 @@
 
 #include <print>
 
+#include <cstdlib>
+
 namespace {
 
 struct EvalCostFunctor : ceres::SizedCostFunction<1, 1, kNumEvalParams> {
@@ -145,6 +147,7 @@ void addResiduals(
         std::array<double, kNumEvalParams>& paramsDouble,
         const std::vector<ScoredPosition>& scoredPositions,
         const bool fixPhaseValues,
+        const int subsampleRate,
         ceres::Problem& problem) {
     problem.AddParameterBlock(&scaleParam, 1);
     problem.AddParameterBlock(paramsDouble.data(), kNumEvalParams);
@@ -153,31 +156,93 @@ void addResiduals(
     *constantParamIdxs           = getConstantParamIdxs(fixPhaseValues);
 
     for (const auto& scoredPosition : scoredPositions) {
+        if (std::rand() % subsampleRate != 0) {
+            continue;
+        }
+
         ceres::CostFunction* costFunction = new EvalCostFunctor(scoredPosition, constantParamIdxs);
         problem.AddResidualBlock(costFunction, nullptr, &scaleParam, paramsDouble.data());
     }
 }
 
-void solve(ceres::Problem& problem) {
+void solve(ceres::Problem& problem, const bool useTrustRegionMethod) {
     ceres::Solver::Options options;
-    options.minimizer_progress_to_stdout      = true;
-    options.num_threads                       = std::thread::hardware_concurrency();
-    options.parameter_tolerance               = 1e-3;
-    options.initial_trust_region_radius       = 1e4;
-    options.max_trust_region_radius           = 1e6;
-    options.dense_linear_algebra_library_type = ceres::CUDA;
-    options.use_mixed_precision_solves        = true;
-    options.max_num_refinement_iterations     = 3;
+    options.minimizer_progress_to_stdout = true;
+    options.num_threads                  = std::thread::hardware_concurrency();
 
-    if (problem.NumResidualBlocks() > 2e5) {
-        options.linear_solver_type = ceres::DENSE_NORMAL_CHOLESKY;
+    if (useTrustRegionMethod) {
+        options.parameter_tolerance               = 1e-3;
+        options.initial_trust_region_radius       = 1e4;
+        options.max_trust_region_radius           = 1e6;
+        options.dense_linear_algebra_library_type = ceres::CUDA;
+        options.use_mixed_precision_solves        = true;
+        options.max_num_refinement_iterations     = 3;
+
+        if (problem.NumResidualBlocks() > 2e5) {
+            options.linear_solver_type = ceres::DENSE_NORMAL_CHOLESKY;
+        } else {
+            options.linear_solver_type = ceres::DENSE_QR;
+        }
     } else {
-        options.linear_solver_type = ceres::DENSE_QR;
+        options.minimizer_type = ceres::MinimizerType::LINE_SEARCH;
     }
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     std::println("\n{}\n", summary.FullReport());
+}
+
+void solveScale(
+        double& scaleParam,
+        std::array<double, kNumEvalParams>& paramsDouble,
+        const std::vector<ScoredPosition>& scoredPositions) {
+    ceres::Problem problem;
+    addResiduals(
+            scaleParam,
+            paramsDouble,
+            scoredPositions,
+            /*fixPhaseValues*/ true,
+            /*subSampleRate*/ 1,
+            problem);
+
+    problem.SetParameterBlockConstant(paramsDouble.data());
+    solve(problem, /*useTrustRegionMethod*/ true);
+}
+
+void solveParams(
+        double& scaleParam,
+        std::array<double, kNumEvalParams>& paramsDouble,
+        const std::vector<ScoredPosition>& scoredPositions,
+        const bool fixPhaseValues) {
+    // Solve subsampled problem
+    {
+        ceres::Problem problem;
+        addResiduals(
+                scaleParam,
+                paramsDouble,
+                scoredPositions,
+                fixPhaseValues,
+                /*subSampleRate*/ 10,
+                problem);
+        problem.SetParameterBlockConstant(&scaleParam);
+
+        solve(problem, /*useTrustRegionMethod*/ true);
+    }
+
+    // Solve full problem
+    {
+        ceres::Problem problem;
+        addResiduals(
+                scaleParam,
+                paramsDouble,
+                scoredPositions,
+                fixPhaseValues,
+                /*subSampleRate*/ 1,
+                problem);
+        problem.SetParameterBlockConstant(&scaleParam);
+
+        solve(problem, /*useTrustRegionMethod*/ true);
+    }
 }
 
 }  // namespace
@@ -188,15 +253,9 @@ void optimize(
         const bool fixPhaseValues) {
     double scaleParam = 400.;
 
-    ceres::Problem problem;
-    addResiduals(scaleParam, paramsDouble, scoredPositions, fixPhaseValues, problem);
-
-    problem.SetParameterBlockConstant(paramsDouble.data());
-    solve(problem);
+    solveScale(scaleParam, paramsDouble, scoredPositions);
 
     std::println("Scale param: {}", scaleParam);
 
-    problem.SetParameterBlockVariable(paramsDouble.data());
-    problem.SetParameterBlockConstant(&scaleParam);
-    solve(problem);
+    solveParams(scaleParam, paramsDouble, scoredPositions, fixPhaseValues);
 }

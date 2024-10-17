@@ -10,8 +10,6 @@ void loadScoredPositions(
         const std::filesystem::path& annotatedFensPath,
         const int dropoutRate,
         std::vector<ScoredPosition>& scoredPositions) {
-    std::srand(42);
-
     std::ifstream in(annotatedFensPath);
 
     const auto startingSize = scoredPositions.size();
