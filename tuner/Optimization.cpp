@@ -213,9 +213,10 @@ void solveParams(
         double& scaleParam,
         std::array<double, kNumEvalParams>& paramsDouble,
         const std::vector<ScoredPosition>& scoredPositions,
-        const bool fixPhaseValues) {
+        const bool fixPhaseValues,
+        const bool solveSubsampledFirst) {
     // Solve subsampled problem
-    {
+    if (solveSubsampledFirst) {
         ceres::Problem problem;
         addResiduals(
                 scaleParam,
@@ -257,5 +258,10 @@ void optimize(
 
     std::println("Scale param: {}", scaleParam);
 
-    solveParams(scaleParam, paramsDouble, scoredPositions, fixPhaseValues);
+    solveParams(
+            scaleParam,
+            paramsDouble,
+            scoredPositions,
+            fixPhaseValues,
+            /*solveSubsampledFirst*/ false);
 }

@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name retune-simpler-pawn-adjustment");
+    writeUci("id name bishop-enemy-pawn-color-adjustment");
     writeUci("id author Joost Houben");
 
     writeOptions();

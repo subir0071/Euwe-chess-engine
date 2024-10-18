@@ -29,6 +29,7 @@ struct EvalParams {
     TaperedTerm isolatedPawnPenalty;
 
     TaperedTerm bishopPawnSameColorAdjustment;
+    TaperedTerm bishopEnemyPawnSameColorAdjustment;
 
     TaperedTerm bishopPairBonus;
     TaperedTerm knightPairBonus;

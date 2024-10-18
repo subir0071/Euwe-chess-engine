@@ -250,6 +250,7 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
             gameState.getOccupancy().ownPiece | gameState.getOccupancy().enemyPiece;
 
     const int numOwnPawns          = popCount(ownPawns);
+    const int numEnemyPawns        = popCount(enemyPawns);
     const int pawnAdjustmentWeight = numOwnPawns - 4;
 
     const BoardPosition enemyKingPosition =
@@ -300,9 +301,17 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                 popCount(ownPawns & kDarkSquareBitBoard),
                 popCount(ownPawns & kLightSquareBitBoard),
         };
-        const std::array<int, 2> pawnsOnSameColorWeight = {
+        const std::array<int, 2> enemyPawnsPerSquareColor = {
+                popCount(enemyPawns & kDarkSquareBitBoard),
+                popCount(enemyPawns & kLightSquareBitBoard),
+        };
+        const std::array<int, 2> ownPawnsOnSameColorWeight = {
                 ownPawnsPerSquareColor[0] + (8 - numOwnPawns) / 2,
                 ownPawnsPerSquareColor[1] + (8 - numOwnPawns) / 2,
+        };
+        const std::array<int, 2> enemyPawnsOnSameColorWeight = {
+                enemyPawnsPerSquareColor[0] + (8 - numEnemyPawns) / 2,
+                enemyPawnsPerSquareColor[1] + (8 - numEnemyPawns) / 2,
         };
 
         std::array<bool, 2> hasBishopOfColor = {false, false};
@@ -321,7 +330,14 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     params.bishopPawnSameColorAdjustment,
                     result.position,
                     jacobians.position,
-                    pawnsOnSameColorWeight[squareColor]);
+                    ownPawnsOnSameColorWeight[squareColor]);
+
+            updateTaperedTerm(
+                    params,
+                    params.bishopEnemyPawnSameColorAdjustment,
+                    result.position,
+                    jacobians.position,
+                    enemyPawnsOnSameColorWeight[squareColor]);
 
             const EvalCalcT kingDistance = bishopDistance(position, enemyKingPosition);
             const EvalCalcT tropism      = 14 - kingDistance;
