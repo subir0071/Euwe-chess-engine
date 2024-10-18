@@ -250,7 +250,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
             gameState.getOccupancy().ownPiece | gameState.getOccupancy().enemyPiece;
 
     const int numOwnPawns          = popCount(ownPawns);
-    const int numEnemyPawns        = popCount(enemyPawns);
     const int pawnAdjustmentWeight = numOwnPawns - 4;
 
     const BoardPosition enemyKingPosition =
@@ -306,12 +305,12 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                 popCount(enemyPawns & kLightSquareBitBoard),
         };
         const std::array<int, 2> ownPawnsOnSameColorWeight = {
-                ownPawnsPerSquareColor[0] + (8 - numOwnPawns) / 2,
-                ownPawnsPerSquareColor[1] + (8 - numOwnPawns) / 2,
+                ownPawnsPerSquareColor[0] - 4,
+                ownPawnsPerSquareColor[1] - 4,
         };
         const std::array<int, 2> enemyPawnsOnSameColorWeight = {
-                enemyPawnsPerSquareColor[0] + (8 - numEnemyPawns) / 2,
-                enemyPawnsPerSquareColor[1] + (8 - numEnemyPawns) / 2,
+                enemyPawnsPerSquareColor[0] - 4,
+                enemyPawnsPerSquareColor[1] - 4,
         };
 
         std::array<bool, 2> hasBishopOfColor = {false, false};

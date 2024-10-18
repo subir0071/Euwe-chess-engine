@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
     quiescePositions(scoredPositions);
 
     std::println("Optimizing...");
-    optimize(paramsDouble, scoredPositions, /*fixPhaseValues*/ true);
+    optimize(paramsDouble, scoredPositions, /*fixPhaseValues*/ false);
 
     std::println("Post-processing...");
     postProcess(paramsDouble, scoredPositions);
