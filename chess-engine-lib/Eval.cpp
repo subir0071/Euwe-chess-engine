@@ -203,6 +203,40 @@ manhattanDistance(const int aFile, const int aRank, const int bFile, const int b
 }
 
 template <bool CalcJacobians>
+FORCE_INLINE void updateForKingTropism(
+        const Evaluator::EvalCalcParams& params,
+        const int ownKingFile,
+        const int ownKingRank,
+        const int enemyKingFile,
+        const int enemyKingRank,
+        const Piece piece,
+        const BoardPosition position,
+        PiecePositionEvaluation& result,
+        PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
+    const auto [file, rank] = fileRankFromPosition(position);
+
+    const EvalCalcT ownKingDistance = manhattanDistance(file, rank, ownKingFile, ownKingRank);
+    const EvalCalcT ownTropism      = 14 - ownKingDistance;
+
+    const EvalCalcT enemyKingDistance = manhattanDistance(file, rank, enemyKingFile, enemyKingRank);
+    const EvalCalcT enemyTropism      = 14 - enemyKingDistance;
+
+    updateTaperedTerm(
+            params,
+            params.ownKingTropism[(int)piece],
+            result.position,
+            jacobians.position,
+            ownTropism);
+
+    updateTaperedTerm(
+            params,
+            params.enemyKingTropism[(int)piece],
+            result.position,
+            jacobians.position,
+            enemyTropism);
+}
+
+template <bool CalcJacobians>
 FORCE_INLINE void evaluatePiecePositionsForSide(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
@@ -240,32 +274,20 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
         while (pieceBitBoard != BitBoard::Empty) {
             const BoardPosition position = popFirstSetPosition(pieceBitBoard);
-            const auto [file, rank]      = fileRankFromPosition(position);
 
             updatePiecePositionEvaluation<CalcJacobians>(
                     params, (int)Piece::Knight, position, side, result, jacobians);
 
-            const EvalCalcT enemyKingDistance =
-                    manhattanDistance(file, rank, enemyKingFile, enemyKingRank);
-            const EvalCalcT enemyTropism = 14 - enemyKingDistance;
-
-            const EvalCalcT ownKingDistance =
-                    manhattanDistance(file, rank, ownKingFile, ownKingRank);
-            const EvalCalcT ownTropism = 14 - ownKingDistance;
-
-            updateTaperedTerm(
+            updateForKingTropism(
                     params,
-                    params.enemyKingTropism[(int)Piece::Knight],
-                    result.position,
-                    jacobians.position,
-                    enemyTropism);
-
-            updateTaperedTerm(
-                    params,
-                    params.ownKingTropism[(int)Piece::Knight],
-                    result.position,
-                    jacobians.position,
-                    ownTropism);
+                    ownKingFile,
+                    ownKingRank,
+                    enemyKingFile,
+                    enemyKingRank,
+                    Piece::Knight,
+                    position,
+                    result,
+                    jacobians);
 
             updateTaperedTerm(
                     params,
@@ -304,7 +326,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
         while (pieceBitBoard != BitBoard::Empty) {
             const BoardPosition position = popFirstSetPosition(pieceBitBoard);
-            const auto [file, rank]      = fileRankFromPosition(position);
 
             updatePiecePositionEvaluation<CalcJacobians>(
                     params, (int)Piece::Bishop, position, side, result, jacobians);
@@ -327,27 +348,16 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     jacobians.position,
                     enemyPawnsOnSameColorWeight[squareColor]);
 
-            const EvalCalcT enemyKingDistance =
-                    manhattanDistance(file, rank, enemyKingFile, enemyKingRank);
-            const EvalCalcT enemyTropism = 14 - enemyKingDistance;
-
-            const EvalCalcT ownKingDistance =
-                    manhattanDistance(file, rank, ownKingFile, ownKingRank);
-            const EvalCalcT ownTropism = 14 - ownKingDistance;
-
-            updateTaperedTerm(
+            updateForKingTropism(
                     params,
-                    params.enemyKingTropism[(int)Piece::Bishop],
-                    result.position,
-                    jacobians.position,
-                    enemyTropism);
-
-            updateTaperedTerm(
-                    params,
-                    params.ownKingTropism[(int)Piece::Bishop],
-                    result.position,
-                    jacobians.position,
-                    ownTropism);
+                    ownKingFile,
+                    ownKingRank,
+                    enemyKingFile,
+                    enemyKingRank,
+                    Piece::Bishop,
+                    position,
+                    result,
+                    jacobians);
 
             updateMobilityEvaluation<CalcJacobians>(
                     params, Piece::Bishop, position, anyPiece, ownOccupancy, result, jacobians);
@@ -370,7 +380,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
         while (pieceBitBoard != BitBoard::Empty) {
             const BoardPosition position = popFirstSetPosition(pieceBitBoard);
-            const auto [file, rank]      = fileRankFromPosition(position);
 
             updatePiecePositionEvaluation<CalcJacobians>(
                     params, (int)Piece::Rook, position, side, result, jacobians);
@@ -391,27 +400,16 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                         1);
             }
 
-            const EvalCalcT enemyKingDistance =
-                    manhattanDistance(file, rank, enemyKingFile, enemyKingRank);
-            const EvalCalcT enemyTropism = 14 - enemyKingDistance;
-
-            const EvalCalcT ownKingDistance =
-                    manhattanDistance(file, rank, ownKingFile, ownKingRank);
-            const EvalCalcT ownTropism = 14 - ownKingDistance;
-
-            updateTaperedTerm(
+            updateForKingTropism(
                     params,
-                    params.enemyKingTropism[(int)Piece::Rook],
-                    result.position,
-                    jacobians.position,
-                    enemyTropism);
-
-            updateTaperedTerm(
-                    params,
-                    params.ownKingTropism[(int)Piece::Rook],
-                    result.position,
-                    jacobians.position,
-                    ownTropism);
+                    ownKingFile,
+                    ownKingRank,
+                    enemyKingFile,
+                    enemyKingRank,
+                    Piece::Rook,
+                    position,
+                    result,
+                    jacobians);
 
             updateTaperedTerm(
                     params,
@@ -431,32 +429,20 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
         while (pieceBitBoard != BitBoard::Empty) {
             const BoardPosition position = popFirstSetPosition(pieceBitBoard);
-            const auto [file, rank]      = fileRankFromPosition(position);
 
             updatePiecePositionEvaluation<CalcJacobians>(
                     params, (int)Piece::Queen, position, side, result, jacobians);
 
-            const EvalCalcT enemyKingDistance =
-                    manhattanDistance(file, rank, enemyKingFile, enemyKingRank);
-            const EvalCalcT enemyTropism = 14 - enemyKingDistance;
-
-            const EvalCalcT ownKingDistance =
-                    manhattanDistance(file, rank, ownKingFile, ownKingRank);
-            const EvalCalcT ownTropism = 14 - ownKingDistance;
-
-            updateTaperedTerm(
+            updateForKingTropism(
                     params,
-                    params.enemyKingTropism[(int)Piece::Queen],
-                    result.position,
-                    jacobians.position,
-                    enemyTropism);
-
-            updateTaperedTerm(
-                    params,
-                    params.ownKingTropism[(int)Piece::Queen],
-                    result.position,
-                    jacobians.position,
-                    ownTropism);
+                    ownKingFile,
+                    ownKingRank,
+                    enemyKingFile,
+                    enemyKingRank,
+                    Piece::Queen,
+                    position,
+                    result,
+                    jacobians);
 
             updateTaperedTerm(
                     params,
