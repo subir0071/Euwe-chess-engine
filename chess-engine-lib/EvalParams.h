@@ -46,7 +46,8 @@ struct EvalParams {
 
     std::array<TaperedTerm, kNumPieceTypes> mobilityBonus;
 
-    std::array<TaperedTerm, kNumPieceTypes> kingTropismBonus;
+    std::array<TaperedTerm, kNumPieceTypes - 1> ownKingTropism;
+    std::array<TaperedTerm, kNumPieceTypes - 1> enemyKingTropism;
 
     TaperedTerm tempoBonus;
 

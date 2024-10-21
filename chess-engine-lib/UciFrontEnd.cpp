@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name abs-bishop-pawn-color-adjustment");
+    writeUci("id name own-piece-king-tropism");
     writeUci("id author Joost Houben");
 
     writeOptions();

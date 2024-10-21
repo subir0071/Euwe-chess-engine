@@ -115,30 +115,6 @@ std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
     // freedom with the piece-square tables.
     setTaperedTermConstant(params.passedPawnBonus[1]);
 
-    // Fix unused values
-
-    // Pawns are never on the 1st or 8th ranks, so their piece-square tables for those ranks are
-    // unused.
-    for (int file = 0; file < kFiles; ++file) {
-        const int pawnIdx       = (int)Piece::Pawn;
-        const int rank1Position = (int)positionFromFileRank(file, 0);
-        const int rank8Position = (int)positionFromFileRank(file, kRanks - 1);
-
-        setTaperedTermConstant(params.pieceSquareTablesWhite[pawnIdx][rank1Position]);
-        setTaperedTermConstant(params.pieceSquareTablesWhite[pawnIdx][rank1Position]);
-    }
-
-    // Pawns are never on the 8th rank, so the passed pawn bonus there is unused.
-    setTaperedTermConstant(params.passedPawnBonus[0]);
-
-    // We don't calculate mobility for pawns or kings.
-    setTaperedTermConstant(params.mobilityBonus[(int)Piece::Pawn]);
-    setTaperedTermConstant(params.mobilityBonus[(int)Piece::King]);
-
-    // We don't calculate king tropism for pawns or kings.
-    setTaperedTermConstant(params.kingTropismBonus[(int)Piece::Pawn]);
-    setTaperedTermConstant(params.kingTropismBonus[(int)Piece::King]);
-
     return constantParamIdxs;
 }
 
