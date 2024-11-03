@@ -197,29 +197,35 @@ FORCE_INLINE void updateForVirtualKingMobility(
             -virtualKingMobility);
 }
 
+static constexpr auto kTropisms = []() {
+    std::array<std::array<std::uint8_t, kSquares>, kSquares> tropisms{};
+    for (int from = 0; from < kSquares; ++from) {
+        const auto [fromFile, fromRank] = fileRankFromPosition((BoardPosition)from);
+        for (int to = 0; to < kSquares; ++to) {
+            const auto [toFile, toRank] = fileRankFromPosition((BoardPosition)to);
+            const int distance = constexprAbs(fromFile - toFile) + constexprAbs(fromRank - toRank);
+            tropisms[from][to] = (std::uint8_t)(14 - distance);
+        }
+    }
+    return tropisms;
+}();
+
 [[nodiscard]] FORCE_INLINE EvalCalcT
-manhattanDistance(const int aFile, const int aRank, const int bFile, const int bRank) {
-    return (EvalCalcT)(std::abs(aFile - bFile) + std::abs(aRank - bRank));
+getTropism(const BoardPosition aPos, const BoardPosition bPos) {
+    return (EvalCalcT)kTropisms[(int)aPos][(int)bPos];
 }
 
 template <bool CalcJacobians>
 FORCE_INLINE void updateForKingTropism(
         const Evaluator::EvalCalcParams& params,
-        const int ownKingFile,
-        const int ownKingRank,
-        const int enemyKingFile,
-        const int enemyKingRank,
+        const BoardPosition ownKingPosition,
+        const BoardPosition enemyKingPosition,
         const Piece piece,
         const BoardPosition position,
         PiecePositionEvaluation& result,
         PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
-    const auto [file, rank] = fileRankFromPosition(position);
-
-    const EvalCalcT ownKingDistance = manhattanDistance(file, rank, ownKingFile, ownKingRank);
-    const EvalCalcT ownTropism      = 14 - ownKingDistance;
-
-    const EvalCalcT enemyKingDistance = manhattanDistance(file, rank, enemyKingFile, enemyKingRank);
-    const EvalCalcT enemyTropism      = 14 - enemyKingDistance;
+    const EvalCalcT ownTropism   = getTropism(ownKingPosition, position);
+    const EvalCalcT enemyTropism = getTropism(enemyKingPosition, position);
 
     updateTaperedTerm(
             params,
@@ -259,9 +265,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
     const int numOwnPawns          = popCount(ownPawns);
     const int pawnAdjustmentWeight = numOwnPawns - 4;
 
-    const auto [ownKingFile, ownKingRank]     = fileRankFromPosition(ownKingPosition);
-    const auto [enemyKingFile, enemyKingRank] = fileRankFromPosition(enemyKingPosition);
-
     // Knights
     {
         BitBoard pieceBitBoard = gameState.getPieceBitBoard(side, Piece::Knight);
@@ -280,10 +283,8 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateForKingTropism(
                     params,
-                    ownKingFile,
-                    ownKingRank,
-                    enemyKingFile,
-                    enemyKingRank,
+                    ownKingPosition,
+                    enemyKingPosition,
                     Piece::Knight,
                     position,
                     result,
@@ -350,10 +351,8 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateForKingTropism(
                     params,
-                    ownKingFile,
-                    ownKingRank,
-                    enemyKingFile,
-                    enemyKingRank,
+                    ownKingPosition,
+                    enemyKingPosition,
                     Piece::Bishop,
                     position,
                     result,
@@ -402,10 +401,8 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateForKingTropism(
                     params,
-                    ownKingFile,
-                    ownKingRank,
-                    enemyKingFile,
-                    enemyKingRank,
+                    ownKingPosition,
+                    enemyKingPosition,
                     Piece::Rook,
                     position,
                     result,
@@ -435,10 +432,8 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateForKingTropism(
                     params,
-                    ownKingFile,
-                    ownKingRank,
-                    enemyKingFile,
-                    enemyKingRank,
+                    ownKingPosition,
+                    enemyKingPosition,
                     Piece::Queen,
                     position,
                     result,

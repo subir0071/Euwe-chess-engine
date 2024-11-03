@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name own-piece-king-tropism");
+    writeUci("id name pre-calc-tropism");
     writeUci("id author Joost Houben");
 
     writeOptions();

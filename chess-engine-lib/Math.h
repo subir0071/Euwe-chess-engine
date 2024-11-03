@@ -24,3 +24,8 @@ template <typename T>
 FORCE_INLINE constexpr T max(const T& a, const T& b) {
     return a > b ? a : b;
 }
+
+template <typename T>
+FORCE_INLINE constexpr T constexprAbs(T x) {
+    return x < 0 ? -x : x;
+}
