@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name king-pawn-tropism");
+    writeUci("id name king-special-pawn-tropism");
     writeUci("id author Joost Houben");
 
     writeOptions();

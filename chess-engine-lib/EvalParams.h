@@ -46,8 +46,13 @@ struct EvalParams {
 
     std::array<TaperedTerm, kNumPieceTypes> mobilityBonus;
 
-    std::array<TaperedTerm, kNumPieceTypes - 1> ownKingTropism;
-    std::array<TaperedTerm, kNumPieceTypes - 1> enemyKingTropism;
+    static constexpr int kDoubledPawnTropismIdx        = kNumPieceTypes - 1;
+    static constexpr int kIsolatedPawnTropismIdx       = kNumPieceTypes;
+    static constexpr int kPassedPawnTropismIdx         = kNumPieceTypes + 1;
+    static constexpr std::size_t kNumTropismPieceTypes = kNumPieceTypes + 2;
+
+    std::array<TaperedTerm, kNumTropismPieceTypes> ownKingTropism;
+    std::array<TaperedTerm, kNumTropismPieceTypes> enemyKingTropism;
 
     TaperedTerm tempoBonus;
 

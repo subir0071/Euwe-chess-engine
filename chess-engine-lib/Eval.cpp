@@ -220,7 +220,7 @@ FORCE_INLINE void updateForKingTropism(
         const Evaluator::EvalCalcParams& params,
         const BoardPosition ownKingPosition,
         const BoardPosition enemyKingPosition,
-        const Piece piece,
+        const int pieceIdx,
         const BoardPosition position,
         PiecePositionEvaluation& result,
         PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
@@ -229,17 +229,30 @@ FORCE_INLINE void updateForKingTropism(
 
     updateTaperedTerm(
             params,
-            params.ownKingTropism[(int)piece],
+            params.ownKingTropism[pieceIdx],
             result.position,
             jacobians.position,
             ownTropism);
 
     updateTaperedTerm(
             params,
-            params.enemyKingTropism[(int)piece],
+            params.enemyKingTropism[pieceIdx],
             result.position,
             jacobians.position,
             enemyTropism);
+}
+
+template <bool CalcJacobians>
+FORCE_INLINE void updateForKingTropism(
+        const Evaluator::EvalCalcParams& params,
+        const BoardPosition ownKingPosition,
+        const BoardPosition enemyKingPosition,
+        const Piece piece,
+        const BoardPosition position,
+        PiecePositionEvaluation& result,
+        PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
+    updateForKingTropism(
+            params, ownKingPosition, enemyKingPosition, (int)piece, position, result, jacobians);
 }
 
 template <bool CalcJacobians>
@@ -595,9 +608,13 @@ FORCE_INLINE void evaluatePawnsForSide(
         const bool isPassedPawn  = !isDoubledPawn && opponentBlockers == BitBoard::Empty;
         const bool isIsolated    = ownNeighbors == BitBoard::Empty;
 
+        int tropismIdx = (int)Piece::Pawn;
+
         if (isDoubledPawn) {
             updateTaperedTerm(
                     params, params.doubledPawnPenalty, result.position, jacobians.position, -1);
+
+            tropismIdx = EvalParams::kDoubledPawnTropismIdx;
         } else if (isPassedPawn) {
             const int rank                = rankFromPosition(position);
             const int distanceToPromotion = side == Side::White ? kRanks - 1 - rank : rank;
@@ -608,6 +625,10 @@ FORCE_INLINE void evaluatePawnsForSide(
                     result.position,
                     jacobians.position,
                     1);
+
+            tropismIdx = EvalParams::kPassedPawnTropismIdx;
+        } else if (isIsolated) {
+            tropismIdx = EvalParams::kIsolatedPawnTropismIdx;
         }
 
         if (isIsolated) {
@@ -619,7 +640,7 @@ FORCE_INLINE void evaluatePawnsForSide(
                 params,
                 ownKingPosition,
                 enemyKingPosition,
-                Piece::Pawn,
+                tropismIdx,
                 position,
                 result,
                 jacobians);
