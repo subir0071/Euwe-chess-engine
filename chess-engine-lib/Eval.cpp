@@ -567,10 +567,10 @@ FORCE_INLINE void evaluatePawnsForSide(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
         const Side side,
+        const BoardPosition ownKingPosition,
+        const BoardPosition enemyKingPosition,
         PiecePositionEvaluation& result,
         PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
-    // TODO: should we hash pawn structure and store pawn eval?
-
     const BitBoard ownPawns   = gameState.getPieceBitBoard(side, Piece::Pawn);
     const BitBoard enemyPawns = gameState.getPieceBitBoard(nextSide(side), Piece::Pawn);
 
@@ -614,6 +614,15 @@ FORCE_INLINE void evaluatePawnsForSide(
             updateTaperedTerm(
                     params, params.isolatedPawnPenalty, result.position, jacobians.position, -1);
         }
+
+        updateForKingTropism(
+                params,
+                ownKingPosition,
+                enemyKingPosition,
+                Piece::Pawn,
+                position,
+                result,
+                jacobians);
     }
 
     result.control |= getPawnControlledSquares(ownPawns, side);
@@ -798,9 +807,21 @@ template <bool CalcJacobians>
     PiecePositionEvaluationJacobians<CalcJacobians> blackPiecePositionJacobians;
 
     evaluatePawnsForSide(
-            params, gameState, Side::White, whitePiecePositionEval, whitePiecePositionJacobians);
+            params,
+            gameState,
+            Side::White,
+            whiteKingPosition,
+            blackKingPosition,
+            whitePiecePositionEval,
+            whitePiecePositionJacobians);
     evaluatePawnsForSide(
-            params, gameState, Side::Black, blackPiecePositionEval, blackPiecePositionJacobians);
+            params,
+            gameState,
+            Side::Black,
+            blackKingPosition,
+            whiteKingPosition,
+            blackPiecePositionEval,
+            blackPiecePositionJacobians);
 
     evaluatePiecePositionsForSide(
             params,
