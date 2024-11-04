@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name retune2-king-special-pawn-tropism");
+    writeUci("id name drawish-opposite-color-bishops");
     writeUci("id author Joost Houben");
 
     writeOptions();

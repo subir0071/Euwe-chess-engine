@@ -515,9 +515,49 @@ FORCE_INLINE void evaluateAttackDefend(
     }
 }
 
-[[nodiscard]] FORCE_INLINE bool isDrawish(
-        const GameState& gameState, const EvalCalcT whiteMaterial, const EvalCalcT blackMaterial) {
-    const bool whiteIsStronger = whiteMaterial >= blackMaterial;
+[[nodiscard]] FORCE_INLINE bool isDrawishOppositeColoredBishops(const GameState& gameState) {
+    const BitBoard anyOtherPiece = gameState.getPieceBitBoard(Side::White, Piece::Knight)
+                                 | gameState.getPieceBitBoard(Side::White, Piece::Rook)
+                                 | gameState.getPieceBitBoard(Side::White, Piece::Queen)
+                                 | gameState.getPieceBitBoard(Side::Black, Piece::Knight)
+                                 | gameState.getPieceBitBoard(Side::Black, Piece::Rook)
+                                 | gameState.getPieceBitBoard(Side::Black, Piece::Queen);
+
+    if (anyOtherPiece != BitBoard::Empty) {
+        return false;
+    }
+
+    const BitBoard whiteDarkBishops =
+            gameState.getPieceBitBoard(Side::White, Piece::Bishop) & kDarkSquareBitBoard;
+    const BitBoard whiteLightBishops =
+            gameState.getPieceBitBoard(Side::White, Piece::Bishop) & kLightSquareBitBoard;
+    const BitBoard blackDarkBishops =
+            gameState.getPieceBitBoard(Side::Black, Piece::Bishop) & kDarkSquareBitBoard;
+    const BitBoard blackLightBishops =
+            gameState.getPieceBitBoard(Side::Black, Piece::Bishop) & kLightSquareBitBoard;
+
+    const bool bishopsAreOppositeColor =
+            ((whiteDarkBishops != BitBoard::Empty) ^ (blackDarkBishops != BitBoard::Empty))
+            && ((whiteLightBishops != BitBoard::Empty) ^ (blackLightBishops != BitBoard::Empty));
+
+    if (!bishopsAreOppositeColor) {
+        return false;
+    }
+
+    const int whitePawns = popCount(gameState.getPieceBitBoard(Side::White, Piece::Pawn));
+    const int blackPawns = popCount(gameState.getPieceBitBoard(Side::Black, Piece::Pawn));
+
+    const int pawnDelta = std::abs(whitePawns - blackPawns);
+
+    return pawnDelta <= 2;
+}
+
+[[nodiscard]] FORCE_INLINE bool isDrawish(const GameState& gameState, const EvalCalcT whiteEval) {
+    if (isDrawishOppositeColoredBishops(gameState)) {
+        return true;
+    }
+
+    const bool whiteIsStronger = whiteEval >= 0;
 
     const int strongerSidePawns =
             whiteIsStronger ? popCount(gameState.getPieceBitBoard(Side::White, Piece::Pawn))
@@ -757,17 +797,6 @@ template <bool CalcJacobians>
                 lateFactor);
     }
 
-    if (isDrawish(
-                gameState,
-                whitePiecePositionEval.material.late,
-                blackPiecePositionEval.material.late)) {
-        materialEval /= 2;
-
-        if constexpr (CalcJacobians) {
-            materialGradient /= 2;
-        }
-    }
-
     return {materialEval, materialGradient};
 }
 
@@ -914,13 +943,21 @@ template <bool CalcJacobians>
             lateFactor,
             earlyFactorGradient);
 
-    const EvalCalcT eval = materialEval + positionEval;
+    EvalCalcT whiteEval = materialEval + positionEval;
 
     if constexpr (CalcJacobians) {
         whiteEvalGradient = materialGradient + positionGradient;
     }
 
-    return eval;
+    if (isDrawish(gameState, whiteEval)) {
+        whiteEval /= 2;
+
+        if constexpr (CalcJacobians) {
+            whiteEvalGradient /= 2;
+        }
+    }
+
+    return whiteEval;
 }
 
 [[nodiscard]] FORCE_INLINE std::pair<bool, bool> insufficientMaterialForSides(
