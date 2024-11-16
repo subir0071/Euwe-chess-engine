@@ -466,15 +466,13 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
     // King
     {
-        const BoardPosition kingPosition =
-                getFirstSetPosition(gameState.getPieceBitBoard(side, Piece::King));
         updatePiecePositionEvaluation<CalcJacobians>(
-                params, (int)Piece::King, kingPosition, side, result, jacobians);
+                params, (int)Piece::King, ownKingPosition, side, result, jacobians);
 
         // no mobility bonus for king
 
         updateForVirtualKingMobility<CalcJacobians>(
-                params, gameState, side, kingPosition, result, jacobians);
+                params, gameState, side, ownKingPosition, result, jacobians);
     }
 }
 
