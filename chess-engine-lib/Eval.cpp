@@ -473,9 +473,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
         // no mobility bonus for king
 
-        const BitBoard control = getPieceControlledSquares(Piece::King, kingPosition, anyPiece);
-        result.control |= control;
-
         updateForVirtualKingMobility<CalcJacobians>(
                 params, gameState, side, kingPosition, result, jacobians);
     }
@@ -486,6 +483,7 @@ FORCE_INLINE void evaluateAttackDefend(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
         const Side side,
+        const BitBoard kingArea,
         const BitBoard ownControl,
         const BitBoard enemyControl,
         PiecePositionEvaluation& result,
@@ -513,6 +511,15 @@ FORCE_INLINE void evaluateAttackDefend(
                     numRelevantPieces);
         }
     }
+
+    const int enemyControlNearKing = popCount(kingArea & enemyControl);
+
+    updateTaperedTerm(
+            params,
+            params.enemyControlNearKing[enemyControlNearKing],
+            result.position,
+            jacobians.position,
+            1);
 }
 
 [[nodiscard]] FORCE_INLINE bool isDrawishOppositeColoredBishops(const GameState& gameState) {
@@ -856,6 +863,14 @@ template <bool CalcJacobians>
     PiecePositionEvaluationJacobians<CalcJacobians> whitePiecePositionJacobians;
     PiecePositionEvaluationJacobians<CalcJacobians> blackPiecePositionJacobians;
 
+    const BitBoard whiteKingArea =
+            getPieceControlledSquares(Piece::King, whiteKingPosition, BitBoard::Empty);
+    const BitBoard blackKingArea =
+            getPieceControlledSquares(Piece::King, blackKingPosition, BitBoard::Empty);
+
+    whitePiecePositionEval.control = whiteKingArea;
+    blackPiecePositionEval.control = blackKingArea;
+
     evaluatePawnsForSide(
             params,
             gameState,
@@ -894,6 +909,7 @@ template <bool CalcJacobians>
             params,
             gameState,
             Side::White,
+            whiteKingArea,
             whitePiecePositionEval.control,
             blackPiecePositionEval.control,
             whitePiecePositionEval,
@@ -903,6 +919,7 @@ template <bool CalcJacobians>
             params,
             gameState,
             Side::Black,
+            blackKingArea,
             blackPiecePositionEval.control,
             whitePiecePositionEval.control,
             blackPiecePositionEval,

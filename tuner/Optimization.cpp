@@ -115,6 +115,8 @@ std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
     // freedom with the piece-square tables.
     setTaperedTermConstant(params.passedPawnBonus[1]);
 
+    setTaperedTermConstant(params.enemyControlNearKing[0]);
+
     return constantParamIdxs;
 }
 

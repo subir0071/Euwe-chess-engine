@@ -58,6 +58,8 @@ struct EvalParams {
 
     std::array<std::array<TaperedTerm, 3>, kNumPieceTypes - 1> attackDefendAdjustment;
 
+    std::array<TaperedTerm, 10> enemyControlNearKing;
+
   private:
     EvalParams() = default;
 };
