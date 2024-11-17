@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name retune-control-near-king");
+    writeUci("id name undo-simpler-pawn-adjustment");
     writeUci("id author Joost Houben");
 
     writeOptions();

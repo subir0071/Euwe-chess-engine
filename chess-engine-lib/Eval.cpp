@@ -276,7 +276,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
             gameState.getOccupancy().ownPiece | gameState.getOccupancy().enemyPiece;
 
     const int numOwnPawns          = popCount(ownPawns);
-    const int pawnAdjustmentWeight = numOwnPawns - 4;
 
     // Knights
     {
@@ -305,10 +304,10 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateTaperedTerm(
                     params,
-                    params.knightPawnAdjustment,
+                    params.knightPawnAdjustment[numOwnPawns],
                     result.material,
                     jacobians.material,
-                    pawnAdjustmentWeight);
+                    1);
 
             updateMobilityEvaluation<CalcJacobians>(
                     params, Piece::Knight, position, anyPiece, ownOccupancy, result, jacobians);
@@ -326,10 +325,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
         const std::array<int, 2> enemyPawnsPerSquareColor = {
                 popCount(enemyPawns & kDarkSquareBitBoard),
                 popCount(enemyPawns & kLightSquareBitBoard),
-        };
-        const std::array<int, 2> ownPawnsOnSameColorWeight = {
-                ownPawnsPerSquareColor[0] - 4,
-                ownPawnsPerSquareColor[1] - 4,
         };
         const std::array<int, 2> enemyPawnsOnSameColorWeight = {
                 enemyPawnsPerSquareColor[0] - 4,
@@ -350,10 +345,10 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateTaperedTerm(
                     params,
-                    params.bishopPawnSameColorAdjustment,
+                    params.bishopPawnSameColorAdjustment[ownPawnsPerSquareColor[squareColor]],
                     result.position,
                     jacobians.position,
-                    ownPawnsOnSameColorWeight[squareColor]);
+                    1);
 
             updateTaperedTerm(
                     params,
@@ -423,10 +418,10 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateTaperedTerm(
                     params,
-                    params.rookPawnAdjustment,
+                    params.rookPawnAdjustment[numOwnPawns],
                     result.material,
                     jacobians.material,
-                    pawnAdjustmentWeight);
+                    1);
 
             updateMobilityEvaluation<CalcJacobians>(
                     params, Piece::Rook, position, anyPiece, ownOccupancy, result, jacobians);
@@ -452,6 +447,7 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     result,
                     jacobians);
 
+            const int pawnAdjustmentWeight = numOwnPawns - 4;
             updateTaperedTerm(
                     params,
                     params.queenPawnAdjustment,
