@@ -15,6 +15,7 @@
 #include <print>
 #include <ranges>
 #include <stdexcept>
+#include <fstream>
 
 #include <cstdlib>
 
@@ -27,15 +28,22 @@ std::array<double, kNumEvalParams> getInitialParams() {
     return evalParamsToDoubles(defaultParams);
 }
 
+std::string getParamsString(const std::array<double, kNumEvalParams>& paramsDouble) {
+    return paramsDouble | std::ranges::views::transform([](double d) { return std::to_string(d); })
+         | std::ranges::views::join_with(std::string(", ")) | std::ranges::to<std::string>();
+}
+
 void printResults(const std::array<double, kNumEvalParams>& paramsDouble) {
     const EvalParams params = evalParamsFromDoubles(paramsDouble);
     std::println("Optimized params:\n{}\n", evalParamsToString(params));
 
-    const std::string paramsString =
-            paramsDouble | std::ranges::views::transform([](double d) { return std::to_string(d); })
-            | std::ranges::views::join_with(std ::string(", ")) | std::ranges::to<std::string>();
+    std::println("\nOptimized param values: {}", getParamsString(paramsDouble));
+}
 
-    std::println("\nOptimized param values: {}", paramsString);
+void saveResults(
+        const std::array<double, kNumEvalParams> paramsDouble, const std::filesystem::path& path) {
+    std::ofstream out(path);
+    out << getParamsString(paramsDouble);
 }
 
 std::vector<std::pair<std::filesystem::path, int>> parseArgs(int argc, char** argv) {
@@ -86,10 +94,14 @@ int main(int argc, char** argv) {
     quiescePositions(scoredPositions);
 
     std::println("Optimizing...");
-    optimize(paramsDouble, scoredPositions, /*fixPhaseValues*/ true);
+    optimize(paramsDouble, scoredPositions, /*fixPhaseValues*/ false);
 
     std::println("Post-processing...");
     postProcess(paramsDouble, scoredPositions);
 
     printResults(paramsDouble);
+
+    const std::filesystem::path outputPath = "optimized_params.txt";
+    saveResults(paramsDouble, outputPath);
+    std::println("Saved optimized params to '{}'", outputPath.string());
 }
