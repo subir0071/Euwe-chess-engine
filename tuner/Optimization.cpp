@@ -117,8 +117,10 @@ std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
 
     // Fix one value in the pawn adjustment tables to avoid gauge freedoms with the piece values.
     setTaperedTermConstant(params.bishopPawnSameColorAdjustment[4]);
+    setTaperedTermConstant(params.bishopEnemyPawnSameColorAdjustment[4]);
     setTaperedTermConstant(params.knightPawnAdjustment[4]);
     setTaperedTermConstant(params.rookPawnAdjustment[4]);
+    setTaperedTermConstant(params.queenPawnAdjustment[4]);
 
     setTaperedTermConstant(params.enemyControlNearKing[0]);
 

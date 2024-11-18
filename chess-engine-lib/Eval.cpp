@@ -326,10 +326,6 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                 popCount(enemyPawns & kDarkSquareBitBoard),
                 popCount(enemyPawns & kLightSquareBitBoard),
         };
-        const std::array<int, 2> enemyPawnsOnSameColorWeight = {
-                enemyPawnsPerSquareColor[0] - 4,
-                enemyPawnsPerSquareColor[1] - 4,
-        };
 
         std::array<bool, 2> hasBishopOfColor = {false, false};
 
@@ -352,10 +348,11 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
             updateTaperedTerm(
                     params,
-                    params.bishopEnemyPawnSameColorAdjustment,
+                    params.bishopEnemyPawnSameColorAdjustment
+                            [enemyPawnsPerSquareColor[squareColor]],
                     result.position,
                     jacobians.position,
-                    enemyPawnsOnSameColorWeight[squareColor]);
+                    1);
 
             updateForKingTropism(
                     params,
@@ -447,13 +444,12 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     result,
                     jacobians);
 
-            const int pawnAdjustmentWeight = numOwnPawns - 4;
             updateTaperedTerm(
                     params,
-                    params.queenPawnAdjustment,
+                    params.queenPawnAdjustment[numOwnPawns],
                     result.material,
                     jacobians.material,
-                    pawnAdjustmentWeight);
+                    1);
 
             updateMobilityEvaluation<CalcJacobians>(
                     params, Piece::Queen, position, anyPiece, ownOccupancy, result, jacobians);

@@ -29,7 +29,7 @@ struct EvalParams {
     TaperedTerm isolatedPawnPenalty;
 
     std::array<TaperedTerm, 9> bishopPawnSameColorAdjustment;
-    TaperedTerm bishopEnemyPawnSameColorAdjustment;
+    std::array<TaperedTerm, 9> bishopEnemyPawnSameColorAdjustment;
 
     TaperedTerm bishopPairBonus;
     TaperedTerm knightPairBonus;
@@ -40,7 +40,7 @@ struct EvalParams {
 
     std::array<TaperedTerm, 9> knightPawnAdjustment;
     std::array<TaperedTerm, 9> rookPawnAdjustment;
-    TaperedTerm queenPawnAdjustment;
+    std::array<TaperedTerm, 9> queenPawnAdjustment;
 
     TaperedTerm kingVirtualMobilityPenalty;
 

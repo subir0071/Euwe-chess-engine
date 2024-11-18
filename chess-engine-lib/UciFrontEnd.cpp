@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name tune6-phase");
+    writeUci("id name more-complex-pawn-adjustment");
     writeUci("id author Joost Houben");
 
     writeOptions();
