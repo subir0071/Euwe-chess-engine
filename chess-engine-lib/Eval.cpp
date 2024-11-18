@@ -512,7 +512,29 @@ FORCE_INLINE void evaluateAttackDefend(
             1);
 }
 
-[[nodiscard]] FORCE_INLINE bool isDrawishOppositeColoredBishops(const GameState& gameState) {
+template <bool CalcJacobians>
+FORCE_INLINE void modifyForFactor(
+        const Evaluator::EvalCalcParams& params,
+        const EvalCalcT& factor,
+        EvalCalcT& whiteEval,
+        ParamGradient<CalcJacobians>& whiteEvalGradient) {
+    if constexpr (CalcJacobians) {
+        whiteEvalGradient *= factor;
+
+        auto& dEvalDFactor = whiteEvalGradient[getParamIndex(params, factor)];
+        MY_ASSERT(dEvalDFactor == 0);
+        dEvalDFactor = whiteEval;
+    }
+
+    whiteEval *= factor;
+}
+
+template <bool CalcJacobians>
+[[nodiscard]] FORCE_INLINE bool correctForOppositeColoredBishops(
+        const GameState& gameState,
+        const Evaluator::EvalCalcParams& params,
+        EvalCalcT& whiteEval,
+        ParamGradient<CalcJacobians>& whiteEvalGradient) {
     const BitBoard anyOtherPiece = gameState.getPieceBitBoard(Side::White, Piece::Knight)
                                  | gameState.getPieceBitBoard(Side::White, Piece::Rook)
                                  | gameState.getPieceBitBoard(Side::White, Piece::Queen)
@@ -546,12 +568,20 @@ FORCE_INLINE void evaluateAttackDefend(
 
     const int pawnDelta = std::abs(whitePawns - blackPawns);
 
-    return pawnDelta <= 2;
+    modifyForFactor<CalcJacobians>(
+            params, params.oppositeColoredBishopFactor[pawnDelta], whiteEval, whiteEvalGradient);
+
+    return true;
 }
 
-[[nodiscard]] FORCE_INLINE bool isDrawish(const GameState& gameState, const EvalCalcT whiteEval) {
-    if (isDrawishOppositeColoredBishops(gameState)) {
-        return true;
+template <bool CalcJacobians>
+FORCE_INLINE void correctForDrawish(
+        const GameState& gameState,
+        const Evaluator::EvalCalcParams& params,
+        EvalCalcT& whiteEval,
+        ParamGradient<CalcJacobians>& whiteEvalGradient) {
+    if (correctForOppositeColoredBishops<CalcJacobians>(gameState, params, whiteEval, whiteEvalGradient)) {
+        return;
     }
 
     const bool whiteIsStronger = whiteEval >= 0;
@@ -561,7 +591,7 @@ FORCE_INLINE void evaluateAttackDefend(
                             : popCount(gameState.getPieceBitBoard(Side::Black, Piece::Pawn));
 
     if (strongerSidePawns > 0) {
-        return false;
+        return;
     }
 
     int strongSideKnights = popCount(gameState.getPieceBitBoard(Side::White, Piece::Knight));
@@ -589,27 +619,33 @@ FORCE_INLINE void evaluateAttackDefend(
 
     // With only a single minor piece you can't reliably deliver mate.
     if (strongSideMajorPieces == 0 && strongSideMinorPieces == 1) {
-        return true;
+        modifyForFactor<CalcJacobians>(
+                params, params.singleMinorFactor, whiteEval, whiteEvalGradient);
+        return;
     }
 
     // Only two knights; this is insufficient material once the weaker side has lost their material.
     if (strongSideMajorPieces == 0 && strongSideKnights == 2 && strongSideBishops == 0) {
-        return true;
+        modifyForFactor<CalcJacobians>(
+                params, params.twoKnightsFactor, whiteEval, whiteEvalGradient);
+        return;
     }
 
     // Rook vs a minor piece is drawish.
     if (strongSideRooks == 1 && strongSideQueens == 0 && strongSideMinorPieces == 0
         && (weakSideMinorPieces == 1 && weakSideMajorPieces == 0)) {
-        return true;
+        modifyForFactor<CalcJacobians>(
+                params, params.rookVsMinorFactor, whiteEval, whiteEvalGradient);
+        return;
     }
 
     // Rook and minor vs rook is drawish.
     if (strongSideRooks == 1 && strongSideQueens == 0 && strongSideMinorPieces == 1
         && weakSideRooks == 1 && weakSideQueens == 0 && weakSideMinorPieces == 0) {
-        return true;
+        modifyForFactor<CalcJacobians>(
+                params, params.rookAndMinorVsRookFactor, whiteEval, whiteEvalGradient);
+        return;
     }
-
-    return false;
 }
 
 template <bool CalcJacobians>
@@ -951,18 +987,11 @@ template <bool CalcJacobians>
             earlyFactorGradient);
 
     EvalCalcT whiteEval = materialEval + positionEval;
-
     if constexpr (CalcJacobians) {
         whiteEvalGradient = materialGradient + positionGradient;
     }
 
-    if (isDrawish(gameState, whiteEval)) {
-        whiteEval /= 2;
-
-        if constexpr (CalcJacobians) {
-            whiteEvalGradient /= 2;
-        }
-    }
+    correctForDrawish<CalcJacobians>(gameState, params, whiteEval, whiteEvalGradient);
 
     return whiteEval;
 }

@@ -60,6 +60,12 @@ struct EvalParams {
 
     std::array<TaperedTerm, 10> enemyControlNearKing;
 
+    std::array<EvalCalcT, 9> oppositeColoredBishopFactor;
+    EvalCalcT singleMinorFactor;
+    EvalCalcT twoKnightsFactor;
+    EvalCalcT rookVsMinorFactor;
+    EvalCalcT rookAndMinorVsRookFactor;
+
   private:
     EvalParams() = default;
 };

@@ -151,7 +151,12 @@ constexpr EvalParamArray kDefaultParams = {
         -57.157520,  -6.877535,   0.000000,    0.000000,    0.257877,    10.708985,   -13.041697,
         12.898991,   -32.517593,  12.153707,   -65.116936,  23.916159,   -79.142273,  29.146774,
         -105.473389, 20.274630,   -163.360275, 32.419979,   -225.373398, -1.049581,   0.000000,
-        0.000000};
+        0.000000,    0.5,         0.5,         0.5,         1.0,         1.0,         1.0,
+        1.0,         1.0,         1.0,         0.5,         0.5,         0.5,         0.5};
+
+std::string evalCalcTToString(const EvalCalcT term) {
+    return std::format("{:>6.1f}", term);
+}
 
 std::string taperedTermToString(const TaperedTerm& term) {
     return std::format("{{{:>6.1f}, {:>6.1f}}}", term.early, term.late);
@@ -179,6 +184,14 @@ void writePieceSquareTables(const PieceSquareTables& pieceSquareTables, std::ost
 template <std::size_t N>
 std::string arrayToString(const std::array<TaperedTerm, N>& valueArray) {
     std::string inner = valueArray | std::ranges::views::transform(taperedTermToString)
+                      | std::ranges::views::join_with(std ::string(", "))
+                      | std::ranges::to<std::string>();
+    return "{" + inner + "}";
+}
+
+template <std::size_t N>
+std::string arrayToString(const std::array<EvalCalcT, N>& valueArray) {
+    std::string inner = valueArray | std::ranges::views::transform(evalCalcTToString)
                       | std::ranges::views::join_with(std ::string(", "))
                       | std::ranges::to<std::string>();
     return "{" + inner + "}";
@@ -317,6 +330,17 @@ std::string evalParamsToString(const EvalParams& params) {
     oss << "}\n";
 
     oss << std::format("\nenemyControlNearKing:\n\t{}", arrayToString(params.enemyControlNearKing));
+
+    oss << std::format(
+            "\noppositeColoredBishopFactor:\n\t{}",
+            arrayToString(params.oppositeColoredBishopFactor));
+
+    oss << std::format("\nsingleMinorFactor:\n\t{}", evalCalcTToString(params.singleMinorFactor));
+    oss << std::format("\ntwoKnightsFactor:\n\t{}", evalCalcTToString(params.twoKnightsFactor));
+    oss << std::format("\nrookVsMinorFactor:\n\t{}", evalCalcTToString(params.rookVsMinorFactor));
+    oss << std::format(
+            "\nrookAndMinorVsRookFactor:\n\t{}",
+            evalCalcTToString(params.rookAndMinorVsRookFactor));
 
     return oss.str();
 }
