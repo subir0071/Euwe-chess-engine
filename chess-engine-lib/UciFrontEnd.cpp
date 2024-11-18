@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name more-complex-pawn-adjustment");
+    writeUci("id name tune2-drawish-factors");
     writeUci("id author Joost Houben");
 
     writeOptions();
