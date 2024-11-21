@@ -58,7 +58,9 @@ struct EvalParams {
 
     std::array<std::array<TaperedTerm, 3>, kNumPieceTypes - 1> attackDefendAdjustment;
 
-    std::array<TaperedTerm, 10> enemyControlNearKing;
+    std::array<TaperedTerm, 10> controlNearEnemyKing;
+    std::array<TaperedTerm, kNumPieceTypes> kingAttackWeight;
+    std::array<TaperedTerm, 6> numKingAttackersAdjustment;
 
     std::array<EvalCalcT, 9> oppositeColoredBishopFactor;
     EvalCalcT singleMinorFactor;

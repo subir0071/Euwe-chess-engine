@@ -122,7 +122,8 @@ std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
     setTaperedTermConstant(params.rookPawnAdjustment[4]);
     setTaperedTermConstant(params.queenPawnAdjustment[4]);
 
-    setTaperedTermConstant(params.enemyControlNearKing[0]);
+    setTaperedTermConstant(params.controlNearEnemyKing[0]);
+    setTaperedTermConstant(params.numKingAttackersAdjustment[0]);
 
     return constantParamIdxs;
 }

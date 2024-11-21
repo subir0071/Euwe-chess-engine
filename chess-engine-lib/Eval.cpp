@@ -24,7 +24,9 @@ struct PiecePositionEvaluation {
 
     EvalCalcT phaseMaterial = 0;
 
-    BitBoard control = BitBoard::Empty;
+    BitBoard control     = BitBoard::Empty;
+    BitBoard kingAttack  = BitBoard::Empty;
+    int numKingAttackers = 0;
 };
 
 VectorT zeros() {
@@ -148,11 +150,24 @@ FORCE_INLINE void updateMobilityEvaluation(
         const BoardPosition position,
         const BitBoard anyPiece,
         const BitBoard ownOccupancy,
+        const BitBoard enemyKingArea,
         PiecePositionEvaluation& result,
         PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
-    const BitBoard control = getPieceControlledSquares(piece, position, anyPiece);
+    const BitBoard control    = getPieceControlledSquares(piece, position, anyPiece);
+    const BitBoard kingAttack = control & enemyKingArea;
 
     result.control |= control;
+    result.kingAttack |= kingAttack;
+
+    const bool isAttacker = kingAttack != BitBoard::Empty;
+
+    result.numKingAttackers += isAttacker;
+    updateTaperedTerm(
+            params,
+            params.kingAttackWeight[(int)piece],
+            result.position,
+            jacobians.position,
+            isAttacker);
 
     const int mobility = popCount(control & ~ownOccupancy);
     updateTaperedTerm(
@@ -262,6 +277,7 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
         const Side side,
         const BoardPosition ownKingPosition,
         const BoardPosition enemyKingPosition,
+        const BitBoard enemyKingArea,
         PiecePositionEvaluation& result,
         PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
     const BitBoard ownPawns   = gameState.getPieceBitBoard(side, Piece::Pawn);
@@ -275,7 +291,7 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
     const BitBoard anyPiece =
             gameState.getOccupancy().ownPiece | gameState.getOccupancy().enemyPiece;
 
-    const int numOwnPawns          = popCount(ownPawns);
+    const int numOwnPawns = popCount(ownPawns);
 
     // Knights
     {
@@ -310,7 +326,14 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     1);
 
             updateMobilityEvaluation<CalcJacobians>(
-                    params, Piece::Knight, position, anyPiece, ownOccupancy, result, jacobians);
+                    params,
+                    Piece::Knight,
+                    position,
+                    anyPiece,
+                    ownOccupancy,
+                    enemyKingArea,
+                    result,
+                    jacobians);
         }
     }
 
@@ -364,7 +387,14 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     jacobians);
 
             updateMobilityEvaluation<CalcJacobians>(
-                    params, Piece::Bishop, position, anyPiece, ownOccupancy, result, jacobians);
+                    params,
+                    Piece::Bishop,
+                    position,
+                    anyPiece,
+                    ownOccupancy,
+                    enemyKingArea,
+                    result,
+                    jacobians);
         }
 
         if (hasBishopOfColor[0] && hasBishopOfColor[1]) {
@@ -421,7 +451,14 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     1);
 
             updateMobilityEvaluation<CalcJacobians>(
-                    params, Piece::Rook, position, anyPiece, ownOccupancy, result, jacobians);
+                    params,
+                    Piece::Rook,
+                    position,
+                    anyPiece,
+                    ownOccupancy,
+                    enemyKingArea,
+                    result,
+                    jacobians);
         }
     }
 
@@ -452,7 +489,14 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                     1);
 
             updateMobilityEvaluation<CalcJacobians>(
-                    params, Piece::Queen, position, anyPiece, ownOccupancy, result, jacobians);
+                    params,
+                    Piece::Queen,
+                    position,
+                    anyPiece,
+                    ownOccupancy,
+                    enemyKingArea,
+                    result,
+                    jacobians);
         }
     }
 
@@ -465,7 +509,33 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
 
         updateForVirtualKingMobility<CalcJacobians>(
                 params, gameState, side, ownKingPosition, result, jacobians);
+
+        const BitBoard control = getPieceControlledSquares(Piece::King, ownKingPosition, anyPiece);
+        const BitBoard kingAttack = control & enemyKingArea;
+        result.kingAttack |= kingAttack;
+        const bool isKingAttacker = kingAttack != BitBoard::Empty;
+        result.numKingAttackers += isKingAttacker;
+
+        // No need to add king attack weight for the king itself: that would be symmetric.
     }
+
+    const int controlNearEnemyKing = popCount(result.kingAttack);
+
+    updateTaperedTerm(
+            params,
+            params.controlNearEnemyKing[controlNearEnemyKing],
+            result.position,
+            jacobians.position,
+            1);
+
+    const int numKingAttackersIdx =
+            min(result.numKingAttackers, (int)params.numKingAttackersAdjustment.size() - 1);
+    updateTaperedTerm(
+            params,
+            params.numKingAttackersAdjustment[numKingAttackersIdx],
+            result.position,
+            jacobians.position,
+            1);
 }
 
 template <bool CalcJacobians>
@@ -473,7 +543,6 @@ FORCE_INLINE void evaluateAttackDefend(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
         const Side side,
-        const BitBoard kingArea,
         const BitBoard ownControl,
         const BitBoard enemyControl,
         PiecePositionEvaluation& result,
@@ -501,15 +570,6 @@ FORCE_INLINE void evaluateAttackDefend(
                     numRelevantPieces);
         }
     }
-
-    const int enemyControlNearKing = popCount(kingArea & enemyControl);
-
-    updateTaperedTerm(
-            params,
-            params.enemyControlNearKing[enemyControlNearKing],
-            result.position,
-            jacobians.position,
-            1);
 }
 
 template <bool CalcJacobians>
@@ -580,7 +640,8 @@ FORCE_INLINE void correctForDrawish(
         const Evaluator::EvalCalcParams& params,
         EvalCalcT& whiteEval,
         ParamGradient<CalcJacobians>& whiteEvalGradient) {
-    if (correctForOppositeColoredBishops<CalcJacobians>(gameState, params, whiteEval, whiteEvalGradient)) {
+    if (correctForOppositeColoredBishops<CalcJacobians>(
+                gameState, params, whiteEval, whiteEvalGradient)) {
         return;
     }
 
@@ -655,6 +716,7 @@ FORCE_INLINE void evaluatePawnsForSide(
         const Side side,
         const BoardPosition ownKingPosition,
         const BoardPosition enemyKingPosition,
+        const BitBoard enemyKingArea,
         PiecePositionEvaluation& result,
         PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
     const BitBoard ownPawns   = gameState.getPieceBitBoard(side, Piece::Pawn);
@@ -719,7 +781,21 @@ FORCE_INLINE void evaluatePawnsForSide(
                 jacobians);
     }
 
-    result.control |= getPawnControlledSquares(ownPawns, side);
+    const BitBoard pawnControl = getPawnControlledSquares(ownPawns, side);
+    result.control |= pawnControl;
+
+    const BitBoard kingAttack = enemyKingArea & pawnControl;
+    result.kingAttack |= kingAttack;
+
+    const int numAttackedSquares = popCount(kingAttack);
+    result.numKingAttackers += numAttackedSquares;
+
+    updateTaperedTerm(
+            params,
+            params.kingAttackWeight[(int)Piece::Pawn],
+            result.position,
+            jacobians.position,
+            numAttackedSquares);
 }
 
 [[nodiscard]] FORCE_INLINE ParamGradient<true> getMaxPhaseMaterialGradient(
@@ -903,6 +979,7 @@ template <bool CalcJacobians>
             Side::White,
             whiteKingPosition,
             blackKingPosition,
+            blackKingArea,
             whitePiecePositionEval,
             whitePiecePositionJacobians);
     evaluatePawnsForSide(
@@ -911,6 +988,7 @@ template <bool CalcJacobians>
             Side::Black,
             blackKingPosition,
             whiteKingPosition,
+            whiteKingArea,
             blackPiecePositionEval,
             blackPiecePositionJacobians);
 
@@ -920,6 +998,7 @@ template <bool CalcJacobians>
             Side::White,
             whiteKingPosition,
             blackKingPosition,
+            blackKingArea,
             whitePiecePositionEval,
             whitePiecePositionJacobians);
     evaluatePiecePositionsForSide(
@@ -928,6 +1007,7 @@ template <bool CalcJacobians>
             Side::Black,
             blackKingPosition,
             whiteKingPosition,
+            whiteKingArea,
             blackPiecePositionEval,
             blackPiecePositionJacobians);
 
@@ -935,7 +1015,6 @@ template <bool CalcJacobians>
             params,
             gameState,
             Side::White,
-            whiteKingArea,
             whitePiecePositionEval.control,
             blackPiecePositionEval.control,
             whitePiecePositionEval,
@@ -945,7 +1024,6 @@ template <bool CalcJacobians>
             params,
             gameState,
             Side::Black,
-            blackKingArea,
             blackPiecePositionEval.control,
             whitePiecePositionEval.control,
             blackPiecePositionEval,
