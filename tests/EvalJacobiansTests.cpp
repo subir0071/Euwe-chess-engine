@@ -60,7 +60,7 @@ TEST(EvalJacobiansTests, TestJacobians) {
 
         for (std::size_t paramIdx = 0; paramIdx < kNumEvalParams; ++paramIdx) {
             const EvalCalcT defaultValue = defaultParamArray[paramIdx];
-            const double epsilon         = max(1e-3, 1e-3 * std::abs(defaultValue));
+            const double epsilon         = max(1e-2, 1e-2 * std::abs(defaultValue));
             const double numericDeriv =
                     numericDerivative(gameState, defaultParamArray, paramIdx, epsilon);
 
