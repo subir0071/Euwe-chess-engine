@@ -195,36 +195,6 @@ FORCE_INLINE void generateSinglePieceMovesFromControl(
     }
 }
 
-FORCE_INLINE bool getFileRankIncrement(
-        const Piece piece,
-        const BoardPosition from,
-        const BoardPosition to,
-        int& fileIncrement,
-        int& rankIncrement) {
-    const auto [fromFile, fromRank] = fileRankFromPosition(from);
-    const auto [toFile, toRank]     = fileRankFromPosition(to);
-    const int deltaFile             = toFile - fromFile;
-    const int deltaRank             = toRank - fromRank;
-
-    const bool isRookMove   = deltaFile == 0 || deltaRank == 0;
-    const bool isBishopMove = std::abs(deltaFile) == std::abs(deltaRank);
-
-    if (!isRookMove && !isBishopMove) {
-        return false;
-    }
-    if (isRookMove && piece != Piece::Rook && piece != Piece::Queen) {
-        return false;
-    }
-    if (isBishopMove && piece != Piece::Bishop && piece != Piece::Queen) {
-        return false;
-    }
-
-    fileIncrement = signum(deltaFile);
-    rankIncrement = signum(deltaRank);
-
-    return true;
-}
-
 }  // namespace
 
 GameState GameState::startingPosition() {
@@ -515,6 +485,8 @@ GameState::UnmakeMoveInfo GameState::makeMove(const Move& move) {
 
     previousHashes_.push_back(boardHash_);
 
+    pinBitBoard_.reset();
+
     return unmakeInfo;
 }
 
@@ -543,6 +515,8 @@ GameState::UnmakeMoveInfo GameState::makeNullMove() {
 
     previousHashes_.push_back(boardHash_);
 
+    pinBitBoard_.reset();
+
     return unmakeInfo;
 }
 
@@ -565,6 +539,8 @@ void GameState::unmakeMove(const Move& move, const UnmakeMoveInfo& unmakeMoveInf
     }
 
     boardHash_ = previousHashes_.back();
+
+    pinBitBoard_.reset();
 }
 
 void GameState::unmakeNullMove(const UnmakeMoveInfo& unmakeMoveInfo) {
@@ -579,6 +555,8 @@ void GameState::unmakeNullMove(const UnmakeMoveInfo& unmakeMoveInfo) {
     previousHashes_.pop_back();
 
     boardHash_ = previousHashes_.back();
+
+    pinBitBoard_.reset();
 }
 
 void GameState::makeCastleMove(const Move& move, const bool reverse) {
@@ -902,6 +880,8 @@ GameState::calculatePiecePinOrKingAttackBitBoards(const Side kingSide) const {
         piecePinOrKingAttackBitBoards[pinIdx++] = pinningBitBoard;
         allPins |= pinningBitBoard;
     }
+
+    pinBitBoard_ = allPins;
 
     return piecePinOrKingAttackBitBoards;
 }

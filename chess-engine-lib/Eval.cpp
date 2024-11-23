@@ -270,6 +270,109 @@ FORCE_INLINE void updateForKingTropism(
             params, ownKingPosition, enemyKingPosition, (int)piece, position, result, jacobians);
 }
 
+FORCE_INLINE BitBoard getPinBitBoard(
+        const GameState& gameState,
+        const BoardPosition kingPosition,
+        const Side kingSide,
+        const BitBoard anyPiece) {
+    BitBoard allPins = BitBoard::Empty;
+
+    const BitBoard enemyRooksOrQueens =
+            gameState.getPieceBitBoard(nextSide(kingSide), Piece::Rook)
+            | gameState.getPieceBitBoard(nextSide(kingSide), Piece::Queen);
+
+    if (enemyRooksOrQueens != BitBoard::Empty) {
+        const BitBoard rookXRayFromKing = getRookXRay(kingPosition, anyPiece);
+        BitBoard xRayingRooks           = rookXRayFromKing & enemyRooksOrQueens;
+
+        while (xRayingRooks != BitBoard::Empty) {
+            const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingRooks);
+
+            int fileIncrement;
+            int rankIncrement;
+            const bool incrementOk = getFileRankIncrement(
+                    Piece::Rook, pinningPiecePosition, kingPosition, fileIncrement, rankIncrement);
+            MY_ASSERT(incrementOk);
+
+            BitBoard pinningBitBoard = getRookXRay(pinningPiecePosition, anyPiece);
+            const BitBoard fullRay =
+                    (BitBoard)getFullRay(pinningPiecePosition, fileIncrement, rankIncrement);
+            pinningBitBoard &= fullRay;
+
+            MY_ASSERT(pinningBitBoard & kingPosition);
+
+            allPins |= pinningBitBoard;
+        }
+    }
+
+    const BitBoard enemyBishopsOrQueens =
+            gameState.getPieceBitBoard(nextSide(kingSide), Piece::Bishop)
+            | gameState.getPieceBitBoard(nextSide(kingSide), Piece::Queen);
+
+    if (enemyBishopsOrQueens != BitBoard::Empty) {
+        const BitBoard bishopXRayFromKing = getBishopXRay(kingPosition, anyPiece);
+        BitBoard xRayingBishops           = bishopXRayFromKing & enemyBishopsOrQueens;
+
+        while (xRayingBishops != BitBoard::Empty) {
+            const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingBishops);
+
+            int fileIncrement;
+            int rankIncrement;
+            const bool incrementOk = getFileRankIncrement(
+                    Piece::Bishop,
+                    pinningPiecePosition,
+                    kingPosition,
+                    fileIncrement,
+                    rankIncrement);
+            MY_ASSERT(incrementOk);
+
+            BitBoard pinningBitBoard = getBishopXRay(pinningPiecePosition, anyPiece);
+            const BitBoard fullRay =
+                    (BitBoard)getFullRay(pinningPiecePosition, fileIncrement, rankIncrement);
+            pinningBitBoard &= fullRay;
+
+            MY_ASSERT(pinningBitBoard & kingPosition);
+
+            allPins |= pinningBitBoard;
+        }
+    }
+
+    return allPins;
+}
+
+template <bool CalcJacobians>
+FORCE_INLINE void updateForPins(
+        const Evaluator::EvalCalcParams& params,
+        const GameState& gameState,
+        const Side side,
+        const BoardPosition ownKingPosition,
+        const BitBoard anyPiece,
+        PiecePositionEvaluation& result,
+        PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
+    BitBoard pinBitBoard;
+    if (side == gameState.getSideToMove() && gameState.getPinBitBoardIfAvailable().has_value()) {
+        pinBitBoard = *gameState.getPinBitBoardIfAvailable();
+    } else {
+        pinBitBoard = getPinBitBoard(gameState, ownKingPosition, side, anyPiece);
+    }
+
+    if (pinBitBoard == BitBoard::Empty) {
+        return;
+    }
+
+    for (int pieceIdx = 0; pieceIdx < kNumPieceTypes - 1; ++pieceIdx) {
+        const BitBoard& pieceBitBoard = gameState.getPieceBitBoard(side, (Piece)pieceIdx);
+        const int numPinnedPieces     = popCount(pieceBitBoard & pinBitBoard);
+
+        updateTaperedTerm(
+                params,
+                params.piecePinnedAdjustment[pieceIdx],
+                result.position,
+                jacobians.position,
+                numPinnedPieces);
+    }
+}
+
 template <bool CalcJacobians>
 FORCE_INLINE void evaluatePiecePositionsForSide(
         const Evaluator::EvalCalcParams& params,
@@ -510,32 +613,29 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
         updateForVirtualKingMobility<CalcJacobians>(
                 params, gameState, side, ownKingPosition, result, jacobians);
 
-        const BitBoard control = getPieceControlledSquares(Piece::King, ownKingPosition, anyPiece);
-        const BitBoard kingAttack = control & enemyKingArea;
-        result.kingAttack |= kingAttack;
-        const bool isKingAttacker = kingAttack != BitBoard::Empty;
-        result.numKingAttackers += isKingAttacker;
+        // Note king attack data between kings was calculated during initialization.
 
-        // No need to add king attack weight for the king itself: that would be symmetric.
+        // King safety. Note: we rely on the king being evaluated last, so that king attack data is complete.
+        const int controlNearEnemyKing = popCount(result.kingAttack);
+
+        updateTaperedTerm(
+                params,
+                params.controlNearEnemyKing[controlNearEnemyKing],
+                result.position,
+                jacobians.position,
+                1);
+
+        const int numKingAttackersIdx =
+                min(result.numKingAttackers, (int)params.numKingAttackersAdjustment.size() - 1);
+        updateTaperedTerm(
+                params,
+                params.numKingAttackersAdjustment[numKingAttackersIdx],
+                result.position,
+                jacobians.position,
+                1);
+
+        updateForPins(params, gameState, side, ownKingPosition, anyPiece, result, jacobians);
     }
-
-    const int controlNearEnemyKing = popCount(result.kingAttack);
-
-    updateTaperedTerm(
-            params,
-            params.controlNearEnemyKing[controlNearEnemyKing],
-            result.position,
-            jacobians.position,
-            1);
-
-    const int numKingAttackersIdx =
-            min(result.numKingAttackers, (int)params.numKingAttackersAdjustment.size() - 1);
-    updateTaperedTerm(
-            params,
-            params.numKingAttackersAdjustment[numKingAttackersIdx],
-            result.position,
-            jacobians.position,
-            1);
 }
 
 template <bool CalcJacobians>
@@ -970,8 +1070,18 @@ template <bool CalcJacobians>
     const BitBoard blackKingArea =
             getPieceControlledSquares(Piece::King, blackKingPosition, BitBoard::Empty);
 
-    whitePiecePositionEval.control = whiteKingArea;
-    blackPiecePositionEval.control = blackKingArea;
+    const BitBoard kingOverlap      = whiteKingArea & blackKingArea;
+    const bool kingsAttackEachOther = kingOverlap != BitBoard::Empty;
+
+    whitePiecePositionEval.control          = whiteKingArea;
+    whitePiecePositionEval.kingAttack       = kingOverlap;
+    whitePiecePositionEval.numKingAttackers = kingsAttackEachOther;
+
+    blackPiecePositionEval.control          = blackKingArea;
+    blackPiecePositionEval.kingAttack       = kingOverlap;
+    blackPiecePositionEval.numKingAttackers = kingsAttackEachOther;
+
+    // No need to add king attack weight for the king itself: that would be symmetric.
 
     evaluatePawnsForSide(
             params,

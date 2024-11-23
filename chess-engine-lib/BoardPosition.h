@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Macros.h"
+#include "Math.h"
+#include "Piece.h"
 #include "Side.h"
 
 #include <stdexcept>
@@ -69,4 +71,34 @@ enum class BoardPosition : std::uint8_t {
 [[nodiscard]] FORCE_INLINE constexpr int getSquareColor(BoardPosition position) {
     const auto [file, rank] = fileRankFromPosition(position);
     return (file + rank) & 1;
+}
+
+FORCE_INLINE bool constexpr getFileRankIncrement(
+        const Piece piece,
+        const BoardPosition from,
+        const BoardPosition to,
+        int& fileIncrement,
+        int& rankIncrement) {
+    const auto [fromFile, fromRank] = fileRankFromPosition(from);
+    const auto [toFile, toRank]     = fileRankFromPosition(to);
+    const int deltaFile             = toFile - fromFile;
+    const int deltaRank             = toRank - fromRank;
+
+    const bool isRookMove   = deltaFile == 0 || deltaRank == 0;
+    const bool isBishopMove = constexprAbs(deltaFile) == constexprAbs(deltaRank);
+
+    if (!isRookMove && !isBishopMove) {
+        return false;
+    }
+    if (isRookMove && piece != Piece::Rook && piece != Piece::Queen) {
+        return false;
+    }
+    if (isBishopMove && piece != Piece::Bishop && piece != Piece::Queen) {
+        return false;
+    }
+
+    fileIncrement = signum(deltaFile);
+    rankIncrement = signum(deltaRank);
+
+    return true;
 }

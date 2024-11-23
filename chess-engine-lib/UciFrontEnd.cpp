@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name more-king-attack-terms2");
+    writeUci("id name pin-eval2");
     writeUci("id author Joost Houben");
 
     writeOptions();

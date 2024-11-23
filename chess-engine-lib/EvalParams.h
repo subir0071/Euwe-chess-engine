@@ -68,6 +68,8 @@ struct EvalParams {
     EvalCalcT rookVsMinorFactor;
     EvalCalcT rookAndMinorVsRookFactor;
 
+    std::array<TaperedTerm, kNumPieceTypes - 1> piecePinnedAdjustment;
+
   private:
     EvalParams() = default;
 };

@@ -140,6 +140,9 @@ void quiescePositions(std::vector<ScoredPosition>& scoredPositions) {
             scoreToUse = 1 - scoreToUse;
         }
 
+        // Run move generation so that the pin bit board is pre-calculated, speeding up evaluation.
+        (void)state.generateMoves(moveStack);
+
         quiescedPositions.emplace_back(state, scoreToUse);
     }
 

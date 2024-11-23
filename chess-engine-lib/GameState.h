@@ -11,6 +11,7 @@
 #include "StackOfVectors.h"
 
 #include <array>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -118,6 +119,10 @@ class GameState {
 
     [[nodiscard]] const PieceOccupancyBitBoards& getOccupancy() const { return occupancy_; }
 
+    [[nodiscard]] const std::optional<BitBoard>& getPinBitBoardIfAvailable() const {
+        return pinBitBoard_;
+    }
+
   private:
     struct PieceIdentifier {
         Piece piece;
@@ -187,4 +192,6 @@ class GameState {
     // Index of the hash of the first position after the last irreversible move (in
     // previousHashes_).
     int lastReversiblePositionHashIdx_ = 0;
+
+    mutable std::optional<BitBoard> pinBitBoard_ = std::nullopt;
 };
