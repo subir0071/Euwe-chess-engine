@@ -119,9 +119,7 @@ class GameState {
 
     [[nodiscard]] const PieceOccupancyBitBoards& getOccupancy() const { return occupancy_; }
 
-    [[nodiscard]] const std::optional<BitBoard>& getPinBitBoardIfAvailable() const {
-        return pinBitBoard_;
-    }
+    [[nodiscard]] BitBoard getPinBitBoard(Side kingSide, BoardPosition kingPosition) const;
 
   private:
     struct PieceIdentifier {
@@ -145,11 +143,6 @@ class GameState {
     [[nodiscard]] ColoredPiece& getPieceOnSquare(BoardPosition position) {
         return pieceOnSquare_[(int)position];
     }
-
-    // TODO: rename this something like xray bitboards?
-    // The last entry in the array stores the union of the other entries
-    [[nodiscard]] std::array<BitBoard, kNumPiecesPerSide> calculatePiecePinOrKingAttackBitBoards(
-            Side kingSide) const;
 
     [[nodiscard]] bool enPassantWillPutUsInCheck() const;
 

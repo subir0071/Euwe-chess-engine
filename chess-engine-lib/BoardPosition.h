@@ -73,32 +73,15 @@ enum class BoardPosition : std::uint8_t {
     return (file + rank) & 1;
 }
 
-FORCE_INLINE bool constexpr getFileRankIncrement(
-        const Piece piece,
-        const BoardPosition from,
-        const BoardPosition to,
-        int& fileIncrement,
-        int& rankIncrement) {
+FORCE_INLINE std::pair<int, int> constexpr getFileRankIncrement(
+        const BoardPosition from, const BoardPosition to) {
     const auto [fromFile, fromRank] = fileRankFromPosition(from);
     const auto [toFile, toRank]     = fileRankFromPosition(to);
     const int deltaFile             = toFile - fromFile;
     const int deltaRank             = toRank - fromRank;
 
-    const bool isRookMove   = deltaFile == 0 || deltaRank == 0;
-    const bool isBishopMove = constexprAbs(deltaFile) == constexprAbs(deltaRank);
+    const int fileIncrement = signum(deltaFile);
+    const int rankIncrement = signum(deltaRank);
 
-    if (!isRookMove && !isBishopMove) {
-        return false;
-    }
-    if (isRookMove && piece != Piece::Rook && piece != Piece::Queen) {
-        return false;
-    }
-    if (isBishopMove && piece != Piece::Bishop && piece != Piece::Queen) {
-        return false;
-    }
-
-    fileIncrement = signum(deltaFile);
-    rankIncrement = signum(deltaRank);
-
-    return true;
+    return {fileIncrement, rankIncrement};
 }

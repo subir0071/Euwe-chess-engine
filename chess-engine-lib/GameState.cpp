@@ -9,13 +9,23 @@
 
 namespace {
 
+[[nodiscard]] FORCE_INLINE BitBoard
+getKingRayBitBoard(const BoardPosition piecePosition, const BoardPosition kingPosition) {
+    const auto [fileIncrement, rankIncrement] = getFileRankIncrement(piecePosition, kingPosition);
+    const BitBoard kingRayBitBoard =
+            (BitBoard)getFullRay(piecePosition, fileIncrement, rankIncrement)
+            | (BitBoard)getFullRay(piecePosition, -fileIncrement, -rankIncrement);
+
+    return kingRayBitBoard;
+}
+
 void generatePawnMoves(
         const BitBoard pawnBitBoard,
         const Side side,
         const GameState::PieceOccupancyBitBoards& occupancy,
         const BoardPosition enPassantTarget,
-        const std::array<BitBoard, kNumPiecesPerSide>& piecePinBitBoards,
         const BitBoard pinBitBoard,
+        const BoardPosition kingPosition,
         StackVector<Move>& moves,
         const bool capturesOnly,
         const BitBoard checkResolutionBitBoard = BitBoard::Full) {
@@ -46,14 +56,16 @@ void generatePawnMoves(
     leftCaptures  = leftCaptures & checkResolutionBitBoard;
     rightCaptures = rightCaptures & checkResolutionBitBoard;
 
-    const int forwardBits   = side == Side::White ? 8 : -8;
-    constexpr int leftBits  = -1;
-    constexpr int rightBits = 1;
+    const int forwardBits       = side == Side::White ? 8 : -8;
+    const int moveRankIncrement = side == Side::White ? 1 : -1;
+    constexpr int leftBits      = -1;
+    constexpr int rightBits     = 1;
 
     const int promotionRank = side == Side::White ? 7 : 0;
 
     auto generateMoves = [&](BitBoard targetBitBoard,
                              const int originOffset,
+                             const int moveFileIncrement,
                              MoveFlags baseFlags) FORCE_INLINE {
         while (targetBitBoard != BitBoard::Empty) {
             const BoardPosition targetPosition = popFirstSetPosition(targetBitBoard);
@@ -62,17 +74,15 @@ void generatePawnMoves(
             const BoardPosition originPosition = (BoardPosition)originIdx;
 
             if (pinBitBoard & originPosition) [[unlikely]] {
-                // Find pin bit board
-                BitBoard pawnPiecePinBitBoard = BitBoard::Empty;
-                for (const auto piecePinBitBoard : piecePinBitBoards) {
-                    if (piecePinBitBoard & originPosition) {
-                        pawnPiecePinBitBoard = piecePinBitBoard;
-                        break;
-                    }
-                }
-                MY_ASSERT(pawnPiecePinBitBoard != BitBoard::Empty);
+                const auto [kingFileIncrement, kingRankIncrement] =
+                        getFileRankIncrement(originPosition, kingPosition);
 
-                if (!(pawnPiecePinBitBoard & targetPosition)) {
+                const bool moveIsAlongPin = (kingFileIncrement == moveFileIncrement
+                                             && kingRankIncrement == moveRankIncrement)
+                                         || (kingFileIncrement == -moveFileIncrement
+                                             && kingRankIncrement == -moveRankIncrement);
+
+                if (!moveIsAlongPin) {
                     // Pin is not along the move direction, so move is impossible
                     continue;
                 }
@@ -106,12 +116,12 @@ void generatePawnMoves(
         singlePushes = singlePushes & checkResolutionBitBoard;
         doublePushes = doublePushes & checkResolutionBitBoard;
 
-        generateMoves(singlePushes, forwardBits, MoveFlags::None);
-        generateMoves(doublePushes, 2 * forwardBits, MoveFlags::None);
+        generateMoves(singlePushes, forwardBits, 0, MoveFlags::None);
+        generateMoves(doublePushes, 2 * forwardBits, 0, MoveFlags::None);
     }
 
-    generateMoves(leftCaptures, forwardBits + leftBits, MoveFlags::IsCapture);
-    generateMoves(rightCaptures, forwardBits + rightBits, MoveFlags::IsCapture);
+    generateMoves(leftCaptures, forwardBits + leftBits, -1, MoveFlags::IsCapture);
+    generateMoves(rightCaptures, forwardBits + rightBits, 1, MoveFlags::IsCapture);
 }
 
 FORCE_INLINE void generateCastlingMoves(
@@ -171,14 +181,10 @@ FORCE_INLINE void generateSinglePieceMovesFromControl(
         const BoardPosition piecePosition,
         BitBoard controlledSquares,
         const GameState::PieceOccupancyBitBoards& occupancy,
-        const BitBoard piecePinBitBoard,
         StackVector<Move>& moves,
         bool capturesOnly) {
     // Can't move to our own pieces
     controlledSquares = controlledSquares & ~occupancy.ownPiece;
-
-    // Pinned pieces can only move along the pin direction
-    controlledSquares = controlledSquares & piecePinBitBoard;
 
     BitBoard captures = controlledSquares & occupancy.enemyPiece;
     while (captures != BitBoard::Empty) {
@@ -220,22 +226,17 @@ StackVector<Move> GameState::generateMoves(
 
     StackVector<Move> moves = stack.makeStackVector();
 
-    const std::array<BitBoard, kNumPiecesPerSide> pinBitBoards =
-            calculatePiecePinOrKingAttackBitBoards(sideToMove_);
-    const BitBoard& pinBitBoard = pinBitBoards.back();
+    const BoardPosition ownKingPosition =
+            getFirstSetPosition(getPieceBitBoard(sideToMove_, Piece::King));
 
-    auto getPiecePinBitBoard = [&](BoardPosition position) {
+    const BitBoard pinBitBoard = getPinBitBoard(sideToMove_, ownKingPosition);
+
+    const auto getPiecePinBitBoard = [&](BoardPosition position) {
         if (!(pinBitBoard & position)) {
             return BitBoard::Full;
         }
-        // Piece is pinned: can only move along the pin direction
-        // Find the pinning piece
-        for (const auto& pinBitBoard : pinBitBoards) {
-            if (pinBitBoard & position) {
-                return pinBitBoard;
-            }
-        }
-        UNREACHABLE;
+
+        return getKingRayBitBoard(position, ownKingPosition);
     };
 
     const bool enPassantCheck =
@@ -250,8 +251,8 @@ StackVector<Move> GameState::generateMoves(
             sideToMove_,
             occupancy_,
             enPassantTarget,
-            pinBitBoards,
             pinBitBoard,
+            ownKingPosition,
             moves,
             capturesOnly);
 
@@ -272,9 +273,8 @@ StackVector<Move> GameState::generateMoves(
             generateSinglePieceMovesFromControl(
                     piece,
                     piecePosition,
-                    controlledSquares,
+                    controlledSquares & piecePinBitBoard,
                     occupancy_,
-                    piecePinBitBoard,
                     moves,
                     capturesOnly);
         }
@@ -288,13 +288,7 @@ StackVector<Move> GameState::generateMoves(
     // King can't walk into check
     const BitBoard kingControlledSquares = getKingControlledSquares(kingPosition) & ~enemyControl;
     generateSinglePieceMovesFromControl(
-            Piece::King,
-            kingPosition,
-            kingControlledSquares,
-            occupancy_,
-            /*piecePinBitBoard =*/BitBoard::Full /* King can't be pinned. */,
-            moves,
-            capturesOnly);
+            Piece::King, kingPosition, kingControlledSquares, occupancy_, moves, capturesOnly);
 
     if (!capturesOnly) {
         // Castling moves
@@ -348,13 +342,7 @@ StackVector<Move> GameState::generateMovesInCheck(
     kingControlledSquares = kingControlledSquares & ~enemyControl;
     kingControlledSquares = kingControlledSquares & ~kingAttackBitBoard;
     generateSinglePieceMovesFromControl(
-            Piece::King,
-            kingPosition,
-            kingControlledSquares,
-            occupancy_,
-            /*piecePinBitBoard =*/BitBoard::Full /* King can't be pinned. */,
-            moves,
-            capturesOnly);
+            Piece::King, kingPosition, kingControlledSquares, occupancy_, moves, capturesOnly);
 
     if (doubleCheck) {
         // Double check: only the king can move
@@ -391,13 +379,7 @@ StackVector<Move> GameState::generateMovesInCheck(
     }
     blockOrCaptureBitBoard |= checkingPieceId.position;
 
-    // Treat the pin or king attack bitboard as the pin bitboard.
-    // This is fine: any piece directly on the other side of the king from the checking piece (if
-    // the checking piece is a sliding piece) will be incorrectly marked as pinned, but those
-    // pieces wouldn't be able to block or capture the checking piece anyway. (If it's a sliding
-    // piece it can't move through the king; if it's a knight its move doesn't line up with the attacker.)
-    const auto pinOrKingAttackBitBoards = calculatePiecePinOrKingAttackBitBoards(sideToMove_);
-    const BitBoard& pinBitBoard         = pinOrKingAttackBitBoards.back();
+    const BitBoard pinBitBoard = getPinBitBoard(sideToMove_, kingPosition);
 
     bool canTakeCheckingPieceEnPassant = false;
     if (enPassantTarget_ != BoardPosition::Invalid) {
@@ -421,8 +403,8 @@ StackVector<Move> GameState::generateMovesInCheck(
             sideToMove_,
             occupancy_,
             enPassantTarget,
-            /*unused*/ pinOrKingAttackBitBoards,
             /*pinBitBoard*/ BitBoard::Empty,
+            kingPosition,
             moves,
             capturesOnly,
             pawnBlockOrCaptureBitBoard);
@@ -449,9 +431,8 @@ StackVector<Move> GameState::generateMovesInCheck(
             generateSinglePieceMovesFromControl(
                     piece,
                     piecePosition,
-                    controlledSquares,
+                    controlledSquares & blockOrCaptureBitBoard,
                     occupancy_,
-                    /*piecePinBitBoard =*/blockOrCaptureBitBoard,
                     moves,
                     capturesOnly);
         }
@@ -818,72 +799,65 @@ void GameState::updateRookCastlingRights(BoardPosition rookPosition, Side rookSi
     }
 }
 
-FORCE_INLINE std::array<BitBoard, kNumPiecesPerSide>
-GameState::calculatePiecePinOrKingAttackBitBoards(const Side kingSide) const {
-    std::array<BitBoard, kNumPiecesPerSide> piecePinOrKingAttackBitBoards{};
-    const BoardPosition kingPosition = getFirstSetPosition(getPieceBitBoard(kingSide, Piece::King));
-    const BitBoard anyPiece          = occupancy_.ownPiece | occupancy_.enemyPiece;
+FORCE_INLINE BitBoard
+GameState::getPinBitBoard(const Side kingSide, const BoardPosition kingPosition) const {
+    if (kingSide == sideToMove_ && pinBitBoard_.has_value()) {
+        return *pinBitBoard_;
+    }
 
-    const BitBoard rookXRayFromKing   = getRookXRay(kingPosition, anyPiece);
-    const BitBoard bishopXRayFromKing = getBishopXRay(kingPosition, anyPiece);
+    const BitBoard anyPiece = occupancy_.ownPiece | occupancy_.enemyPiece;
+
+    BitBoard allPins = BitBoard::Empty;
 
     const BitBoard enemyRooksOrQueens = getPieceBitBoard(nextSide(kingSide), Piece::Rook)
                                       | getPieceBitBoard(nextSide(kingSide), Piece::Queen);
 
+    if (enemyRooksOrQueens != BitBoard::Empty) {
+        const BitBoard rookXRayFromKing = getRookXRay(kingPosition, anyPiece);
+        BitBoard xRayingRooks           = rookXRayFromKing & enemyRooksOrQueens;
+
+        if (xRayingRooks != BitBoard::Empty) {
+            const BitBoard rookAttackFromKing = getRookAttack(kingPosition, anyPiece);
+            xRayingRooks &= ~rookAttackFromKing;
+
+            while (xRayingRooks != BitBoard::Empty) {
+                const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingRooks);
+
+                const BitBoard pinningBitBoard =
+                        rookAttackFromKing & getRookAttack(pinningPiecePosition, anyPiece);
+
+                allPins |= pinningBitBoard;
+            }
+        }
+    }
+
     const BitBoard enemyBishopsOrQueens = getPieceBitBoard(nextSide(kingSide), Piece::Bishop)
                                         | getPieceBitBoard(nextSide(kingSide), Piece::Queen);
 
-    BitBoard xRayingRooks   = rookXRayFromKing & enemyRooksOrQueens;
-    BitBoard xRayingBishops = bishopXRayFromKing & enemyBishopsOrQueens;
+    if (enemyBishopsOrQueens != BitBoard::Empty) {
+        const BitBoard bishopXRayFromKing = getBishopXRay(kingPosition, anyPiece);
+        BitBoard xRayingBishops           = bishopXRayFromKing & enemyBishopsOrQueens;
 
-    int pinIdx        = 0;
-    BitBoard& allPins = piecePinOrKingAttackBitBoards[kNumPiecesPerSide - 1ULL];
+        if (xRayingBishops != BitBoard::Empty) {
+            const BitBoard bishopAttackFromKing = getBishopAttack(kingPosition, anyPiece);
+            xRayingBishops &= ~bishopAttackFromKing;
 
-    while (xRayingRooks != BitBoard::Empty) {
-        const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingRooks);
+            while (xRayingBishops != BitBoard::Empty) {
+                const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingBishops);
 
-        int fileIncrement;
-        int rankIncrement;
-        const bool incrementOk = getFileRankIncrement(
-                Piece::Rook, pinningPiecePosition, kingPosition, fileIncrement, rankIncrement);
-        MY_ASSERT(incrementOk);
+                const BitBoard pinningBitBoard =
+                        bishopAttackFromKing & getBishopAttack(pinningPiecePosition, anyPiece);
 
-        BitBoard pinningBitBoard = getRookXRay(pinningPiecePosition, anyPiece);
-        const BitBoard fullRay =
-                (BitBoard)getFullRay(pinningPiecePosition, fileIncrement, rankIncrement);
-        pinningBitBoard &= fullRay;
-
-        MY_ASSERT(pinningBitBoard & kingPosition);
-
-        MY_ASSERT(pinIdx < piecePinOrKingAttackBitBoards.size());
-        piecePinOrKingAttackBitBoards[pinIdx++] = pinningBitBoard;
-        allPins |= pinningBitBoard;
+                allPins |= pinningBitBoard;
+            }
+        }
     }
 
-    while (xRayingBishops != BitBoard::Empty) {
-        const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingBishops);
-
-        int fileIncrement;
-        int rankIncrement;
-        const bool incrementOk = getFileRankIncrement(
-                Piece::Bishop, pinningPiecePosition, kingPosition, fileIncrement, rankIncrement);
-        MY_ASSERT(incrementOk);
-
-        BitBoard pinningBitBoard = getBishopXRay(pinningPiecePosition, anyPiece);
-        const BitBoard fullRay =
-                (BitBoard)getFullRay(pinningPiecePosition, fileIncrement, rankIncrement);
-        pinningBitBoard &= fullRay;
-
-        MY_ASSERT(pinningBitBoard & kingPosition);
-
-        MY_ASSERT(pinIdx < piecePinOrKingAttackBitBoards.size());
-        piecePinOrKingAttackBitBoards[pinIdx++] = pinningBitBoard;
-        allPins |= pinningBitBoard;
+    if (kingSide == sideToMove_) {
+        pinBitBoard_ = allPins;
     }
 
-    pinBitBoard_ = allPins;
-
-    return piecePinOrKingAttackBitBoards;
+    return allPins;
 }
 
 bool GameState::enPassantWillPutUsInCheck() const {

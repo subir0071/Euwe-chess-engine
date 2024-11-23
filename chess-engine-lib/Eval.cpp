@@ -270,62 +270,6 @@ FORCE_INLINE void updateForKingTropism(
             params, ownKingPosition, enemyKingPosition, (int)piece, position, result, jacobians);
 }
 
-FORCE_INLINE BitBoard getPinBitBoard(
-        const GameState& gameState,
-        const BoardPosition kingPosition,
-        const Side kingSide,
-        const BitBoard anyPiece) {
-    BitBoard allPins = BitBoard::Empty;
-
-    const BitBoard enemyRooksOrQueens =
-            gameState.getPieceBitBoard(nextSide(kingSide), Piece::Rook)
-            | gameState.getPieceBitBoard(nextSide(kingSide), Piece::Queen);
-
-    if (enemyRooksOrQueens != BitBoard::Empty) {
-        const BitBoard rookXRayFromKing = getRookXRay(kingPosition, anyPiece);
-        BitBoard xRayingRooks           = rookXRayFromKing & enemyRooksOrQueens;
-
-        if (xRayingRooks != BitBoard::Empty) {
-            const BitBoard rookAttackFromKing = getRookAttack(kingPosition, anyPiece);
-            xRayingRooks &= ~rookAttackFromKing;
-
-            while (xRayingRooks != BitBoard::Empty) {
-                const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingRooks);
-
-                const BitBoard pinningBitBoard =
-                        rookAttackFromKing & getRookAttack(pinningPiecePosition, anyPiece);
-
-                allPins |= pinningBitBoard;
-            }
-        }
-    }
-
-    const BitBoard enemyBishopsOrQueens =
-            gameState.getPieceBitBoard(nextSide(kingSide), Piece::Bishop)
-            | gameState.getPieceBitBoard(nextSide(kingSide), Piece::Queen);
-
-    if (enemyBishopsOrQueens != BitBoard::Empty) {
-        const BitBoard bishopXRayFromKing = getBishopXRay(kingPosition, anyPiece);
-        BitBoard xRayingBishops           = bishopXRayFromKing & enemyBishopsOrQueens;
-
-        if (xRayingBishops != BitBoard::Empty) {
-            const BitBoard bishopAttackFromKing = getBishopAttack(kingPosition, anyPiece);
-            xRayingBishops &= ~bishopAttackFromKing;
-
-            while (xRayingBishops != BitBoard::Empty) {
-                const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingBishops);
-
-                const BitBoard pinningBitBoard =
-                        bishopAttackFromKing & getBishopAttack(pinningPiecePosition, anyPiece);
-
-                allPins |= pinningBitBoard;
-            }
-        }
-    }
-
-    return allPins;
-}
-
 template <bool CalcJacobians>
 FORCE_INLINE void updateForPins(
         const Evaluator::EvalCalcParams& params,
@@ -335,13 +279,7 @@ FORCE_INLINE void updateForPins(
         const BitBoard anyPiece,
         PiecePositionEvaluation& result,
         PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
-    BitBoard pinBitBoard;
-    if (side == gameState.getSideToMove() && gameState.getPinBitBoardIfAvailable().has_value()) {
-        pinBitBoard = *gameState.getPinBitBoardIfAvailable();
-    } else {
-        pinBitBoard = getPinBitBoard(gameState, ownKingPosition, side, anyPiece);
-    }
-
+    const BitBoard pinBitBoard = gameState.getPinBitBoard(side, ownKingPosition);
     if (pinBitBoard == BitBoard::Empty) {
         return;
     }
