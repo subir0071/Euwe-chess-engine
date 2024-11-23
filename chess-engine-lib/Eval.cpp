@@ -285,23 +285,18 @@ FORCE_INLINE BitBoard getPinBitBoard(
         const BitBoard rookXRayFromKing = getRookXRay(kingPosition, anyPiece);
         BitBoard xRayingRooks           = rookXRayFromKing & enemyRooksOrQueens;
 
-        while (xRayingRooks != BitBoard::Empty) {
-            const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingRooks);
+        if (xRayingRooks != BitBoard::Empty) {
+            const BitBoard rookAttackFromKing = getRookAttack(kingPosition, anyPiece);
+            xRayingRooks &= ~rookAttackFromKing;
 
-            int fileIncrement;
-            int rankIncrement;
-            const bool incrementOk = getFileRankIncrement(
-                    Piece::Rook, pinningPiecePosition, kingPosition, fileIncrement, rankIncrement);
-            MY_ASSERT(incrementOk);
+            while (xRayingRooks != BitBoard::Empty) {
+                const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingRooks);
 
-            BitBoard pinningBitBoard = getRookXRay(pinningPiecePosition, anyPiece);
-            const BitBoard fullRay =
-                    (BitBoard)getFullRay(pinningPiecePosition, fileIncrement, rankIncrement);
-            pinningBitBoard &= fullRay;
+                const BitBoard pinningBitBoard =
+                        rookAttackFromKing & getRookAttack(pinningPiecePosition, anyPiece);
 
-            MY_ASSERT(pinningBitBoard & kingPosition);
-
-            allPins |= pinningBitBoard;
+                allPins |= pinningBitBoard;
+            }
         }
     }
 
@@ -313,27 +308,18 @@ FORCE_INLINE BitBoard getPinBitBoard(
         const BitBoard bishopXRayFromKing = getBishopXRay(kingPosition, anyPiece);
         BitBoard xRayingBishops           = bishopXRayFromKing & enemyBishopsOrQueens;
 
-        while (xRayingBishops != BitBoard::Empty) {
-            const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingBishops);
+        if (xRayingBishops != BitBoard::Empty) {
+            const BitBoard bishopAttackFromKing = getBishopAttack(kingPosition, anyPiece);
+            xRayingBishops &= ~bishopAttackFromKing;
 
-            int fileIncrement;
-            int rankIncrement;
-            const bool incrementOk = getFileRankIncrement(
-                    Piece::Bishop,
-                    pinningPiecePosition,
-                    kingPosition,
-                    fileIncrement,
-                    rankIncrement);
-            MY_ASSERT(incrementOk);
+            while (xRayingBishops != BitBoard::Empty) {
+                const BoardPosition pinningPiecePosition = popFirstSetPosition(xRayingBishops);
 
-            BitBoard pinningBitBoard = getBishopXRay(pinningPiecePosition, anyPiece);
-            const BitBoard fullRay =
-                    (BitBoard)getFullRay(pinningPiecePosition, fileIncrement, rankIncrement);
-            pinningBitBoard &= fullRay;
+                const BitBoard pinningBitBoard =
+                        bishopAttackFromKing & getBishopAttack(pinningPiecePosition, anyPiece);
 
-            MY_ASSERT(pinningBitBoard & kingPosition);
-
-            allPins |= pinningBitBoard;
+                allPins |= pinningBitBoard;
+            }
         }
     }
 
