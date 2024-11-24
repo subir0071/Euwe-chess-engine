@@ -70,6 +70,9 @@ struct EvalParams {
 
     std::array<TaperedTerm, kNumPieceTypes - 1> piecePinnedAdjustment;
 
+    TaperedTerm kingOpenFileAdjustment;
+    TaperedTerm kingFlankOpenFileAdjustment;
+
   private:
     EvalParams() = default;
 };

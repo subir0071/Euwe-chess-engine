@@ -298,6 +298,41 @@ FORCE_INLINE void updateForPins(
 }
 
 template <bool CalcJacobians>
+FORCE_INLINE void updateForKingOpenFiles(
+        const Evaluator::EvalCalcParams& params,
+        const Side side,
+        const BoardPosition kingPosition,
+        const BitBoard ownPawns,
+        PiecePositionEvaluation& result,
+        PiecePositionEvaluationJacobians<CalcJacobians>& jacobians) {
+    const BitBoard forwardMask = getPawnForwardMask(kingPosition, side);
+    if ((ownPawns & forwardMask) == BitBoard::Empty) {
+        updateTaperedTerm(
+                params, params.kingOpenFileAdjustment, result.position, jacobians.position, 1);
+    }
+
+    const BitBoard neighboringPawns = ownPawns & getPawnNeighborFileMask(kingPosition);
+    float flankWeight               = 0.f;
+
+    const BoardPosition flank1Position =
+            (BoardPosition)((std::uint8_t)kingPosition - (std::uint8_t)1);
+    const BitBoard flank1Mask = getPawnForwardMask(flank1Position, side);
+    flankWeight += (float)((neighboringPawns & flank1Mask) == BitBoard::Empty);
+
+    const BoardPosition flank2Position =
+            (BoardPosition)((std::uint8_t)kingPosition + (std::uint8_t)1);
+    const BitBoard flank2Mask = getPawnForwardMask(flank2Position, side);
+    flankWeight += (float)((neighboringPawns & flank2Mask) == BitBoard::Empty);
+
+    updateTaperedTerm(
+            params,
+            params.kingFlankOpenFileAdjustment,
+            result.position,
+            jacobians.position,
+            flankWeight);
+}
+
+template <bool CalcJacobians>
 FORCE_INLINE void evaluatePiecePositionsForSide(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
@@ -559,6 +594,8 @@ FORCE_INLINE void evaluatePiecePositionsForSide(
                 1);
 
         updateForPins(params, gameState, side, ownKingPosition, anyPiece, result, jacobians);
+
+        updateForKingOpenFiles(params, side, ownKingPosition, ownPawns, result, jacobians);
     }
 }
 
