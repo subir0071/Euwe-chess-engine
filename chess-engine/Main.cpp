@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine);
+            UciFrontEnd uciFrontEnd(engine, "pin-eval4");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

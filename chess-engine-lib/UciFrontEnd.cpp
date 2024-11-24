@@ -51,7 +51,11 @@ std::string stringToLower(std::string_view str) {
 
 class UciFrontEnd::Impl final : public IFrontEnd {
   public:
-    Impl(IEngine& engine, std::istream& in, std::ostream& out, std::ostream& debug);
+    Impl(IEngine& engine,
+         std::string name,
+         std::istream& in,
+         std::ostream& out,
+         std::ostream& debug);
     ~Impl();
 
     void run() override;
@@ -106,6 +110,8 @@ class UciFrontEnd::Impl final : public IFrontEnd {
 
     IEngine& engine_;
 
+    std::string name_;
+
     std::istream& in_;
     std::ostream& out_;
     std::ostream& debug_;
@@ -119,8 +125,10 @@ class UciFrontEnd::Impl final : public IFrontEnd {
     std::future<void> goFuture_;
 };
 
-UciFrontEnd::Impl::Impl(IEngine& engine, std::istream& in, std::ostream& out, std::ostream& debug)
+UciFrontEnd::Impl::Impl(
+        IEngine& engine, std::string name, std::istream& in, std::ostream& out, std::ostream& debug)
     : engine_(engine),
+      name_(std::move(name)),
       in_(in),
       out_(out),
       debug_(debug),
@@ -141,7 +149,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name pin-eval4");
+    writeUci("id name {}", name_);
     writeUci("id author Joost Houben");
 
     writeOptions();
@@ -662,8 +670,9 @@ void UciFrontEnd::Impl::writeDebugNonUci(
 
 // Implementation of interface: forward to implementation
 
-UciFrontEnd::UciFrontEnd(IEngine& engine, std::istream& in, std::ostream& out, std::ostream& debug)
-    : impl_(std::make_unique<Impl>(engine, in, out, debug)) {}
+UciFrontEnd::UciFrontEnd(
+        IEngine& engine, std::string name, std::istream& in, std::ostream& out, std::ostream& debug)
+    : impl_(std::make_unique<Impl>(engine, std::move(name), in, out, debug)) {}
 
 UciFrontEnd::~UciFrontEnd() = default;
 

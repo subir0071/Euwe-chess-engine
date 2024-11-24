@@ -15,6 +15,7 @@ class UciFrontEnd final : public IFrontEnd {
   public:
     UciFrontEnd(
             IEngine& engine,
+            std::string name,
             std::istream& in    = std::cin,
             std::ostream& out   = std::cout,
             std::ostream& debug = std::cerr);
