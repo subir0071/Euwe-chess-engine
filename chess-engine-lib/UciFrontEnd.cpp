@@ -141,7 +141,7 @@ UciFrontEnd::Impl::~Impl() {
 }
 
 void UciFrontEnd::Impl::run() {
-    writeUci("id name faster-pin-calc");
+    writeUci("id name pin-eval4");
     writeUci("id author Joost Houben");
 
     writeOptions();
