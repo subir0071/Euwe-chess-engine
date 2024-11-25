@@ -34,12 +34,12 @@ struct TermWithGradient;
 
 template <>
 struct TermWithGradient<false> {
-    EvalCalcT value;
+    EvalCalcT value = 0;
 };
 
 template <>
 struct TermWithGradient<true> {
-    EvalCalcT value;
+    EvalCalcT value          = 0;
     ParamGradient<true> grad = zeroGradient<true>();
 };
 
@@ -114,9 +114,10 @@ FORCE_INLINE void updatePiecePositionEvaluation(
         result.phaseMaterial.grad[getParamIndex(params, params.phaseMaterialValues[pieceIdx])] += 1;
     }
 
-    updateTaperedTerm(params, params.pieceValues[pieceIdx], result.eval, 1);
-
-    // Manual update for position because of piece square table index mapping.
+    // We manually update value and gradient instead of using updateTaperedTerm to account for:
+    //  - Piece values being folded into the stored PSTs.
+    //  - The stored PSTs being calculated per-side (whereas the params PSTs are for white and rely
+    //    on per-side indexing).
 
     result.eval.early.value += params.pieceSquareTables[(int)side][pieceIdx][(int)position].early;
     result.eval.late.value += params.pieceSquareTables[(int)side][pieceIdx][(int)position].late;
@@ -132,6 +133,9 @@ FORCE_INLINE void updatePiecePositionEvaluation(
                 1;
         result.eval.late.grad[getParamIndex(
                 params, params.pieceSquareTablesWhite[pieceIdx][positionForPieceSquare].late)] += 1;
+
+        result.eval.early.grad[getParamIndex(params, params.pieceValues[pieceIdx].early)] += 1;
+        result.eval.late.grad[getParamIndex(params, params.pieceValues[pieceIdx].late)] += 1;
     }
 }
 
@@ -997,6 +1001,20 @@ Evaluator::EvalCalcParams::EvalCalcParams(const EvalParams& evalParams) : EvalPa
     pieceSquareTables = {
             evalParams.pieceSquareTablesWhite,
             getReflectedPieceSquareTables(evalParams.pieceSquareTablesWhite)};
+
+    // Fold piece values into PSTs for more efficient calculation.
+    // We still use the piece values to subtract this back out in getPieceSquareValue.
+    for (int sideIdx = 0; sideIdx < 2; ++sideIdx) {
+        for (int pieceIdx = 0; pieceIdx < kNumPieceTypes; ++pieceIdx) {
+            for (int posIdx = 0; posIdx < kSquares; ++posIdx) {
+                pieceSquareTables[sideIdx][pieceIdx][posIdx].early +=
+                        evalParams.pieceValues[pieceIdx].early;
+
+                pieceSquareTables[sideIdx][pieceIdx][posIdx].late +=
+                        evalParams.pieceValues[pieceIdx].late;
+            }
+        }
+    }
 }
 
 Evaluator::Evaluator() : Evaluator(EvalParams::getDefaultParams()) {}
@@ -1005,7 +1023,14 @@ Evaluator::Evaluator(const EvalParams& params) : params_(params) {}
 
 FORCE_INLINE int Evaluator::getPieceSquareValue(
         const Piece piece, BoardPosition position, const Side side) const {
-    return (int)params_.pieceSquareTables[(int)side][(int)piece][(int)position].early;
+    // Subtract out the piece values that we folded into the PSTs. That way the returned value is a
+    // good representation of how good this square is for the given piece, which is useful for
+    // heuristics in the search.
+    // We also choose the early values. The values returned by this function are used for history
+    // heuristic initialization, so that makes sense. They're also used for move ordering for which
+    // the choice is perhaps a bit arbitrary.
+    return (int)params_.pieceSquareTables[(int)side][(int)piece][(int)position].early
+         - params_.pieceValues[(int)piece].early;
 }
 
 EvalCalcT Evaluator::evaluateRaw(const GameState& gameState) const {

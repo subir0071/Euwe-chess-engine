@@ -70,6 +70,12 @@ void extractPieceSquareValues(
 
 void updatePieceValuesFromPieceSquare(
         EvalParams& evalParams, const std::vector<ScoredPosition>& scoredPositions) {
+    // Subtract out the average piece square value and add it to the piece values.
+    // This makes the piece square values a good representation for how good this square is for a
+    // given piece. This is useful for heuristics in the search.
+    // We calculate the average across all positions instead of a naive average across all squares,
+    // since pieces are not uniformly distributed across the board over the course of a game.
+
     std::array<double, kNumPieceTypes> summedPieceSquareValuesEarly{};
     std::array<double, kNumPieceTypes> summedPieceSquareValuesLate{};
     std::array<double, kNumPieceTypes> numPieceOccurrencesEarly{};
