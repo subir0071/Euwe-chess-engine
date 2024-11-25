@@ -819,10 +819,8 @@ template <bool CalcJacobians>
 }
 
 template <bool CalcJacobians>
-[[nodiscard]] FORCE_INLINE EvalCalcT evaluateForWhite(
-        const Evaluator::EvalCalcParams& params,
-        const GameState& gameState,
-        ParamGradient<CalcJacobians>& whiteEvalGradient) {
+[[nodiscard]] FORCE_INLINE TermWithGradient<CalcJacobians> evaluateForWhite(
+        const Evaluator::EvalCalcParams& params, const GameState& gameState) {
 
     const BoardPosition whiteKingPosition =
             getFirstSetPosition(gameState.getPieceBitBoard(Side::White, Piece::King));
@@ -917,11 +915,7 @@ template <bool CalcJacobians>
 
     correctForDrawish<CalcJacobians>(gameState, params, taperedEval);
 
-    if constexpr (CalcJacobians) {
-        whiteEvalGradient = taperedEval.grad;
-    }
-
-    return taperedEval.value;
+    return taperedEval;
 }
 
 [[nodiscard]] FORCE_INLINE std::pair<bool, bool> insufficientMaterialForSides(
@@ -1034,27 +1028,24 @@ FORCE_INLINE int Evaluator::getPieceSquareValue(
 }
 
 EvalCalcT Evaluator::evaluateRaw(const GameState& gameState) const {
-    ParamGradient<false> gradient;
-    const EvalCalcT rawEvalWhite = evaluateForWhite<false>(params_, gameState, gradient);
+    const auto rawEvalWhite = evaluateForWhite<false>(params_, gameState);
 
-    return gameState.getSideToMove() == Side::White ? rawEvalWhite : -rawEvalWhite;
+    return gameState.getSideToMove() == Side::White ? rawEvalWhite.value : -rawEvalWhite.value;
 }
 
 EvalWithGradient Evaluator::evaluateWithGradient(const GameState& gameState) const {
-    ParamGradient<true> gradient = zeroGradient<true>();
-    const EvalCalcT rawEvalWhite = evaluateForWhite<true>(params_, gameState, gradient);
+    const auto rawEvalWhite = evaluateForWhite<true>(params_, gameState);
 
     const EvalCalcT colorFactor = gameState.getSideToMove() == Side::White ? 1 : -1;
 
-    return {.eval = colorFactor * rawEvalWhite, .gradient = colorFactor * gradient};
+    return {.eval = colorFactor * rawEvalWhite.value, .gradient = colorFactor * rawEvalWhite.grad};
 }
 
 EvalT Evaluator::evaluate(const GameState& gameState) const {
-    ParamGradient<false> gradient;
-    const EvalCalcT rawEvalWhite = evaluateForWhite<false>(params_, gameState, gradient);
+    const auto rawEvalWhite = evaluateForWhite<false>(params_, gameState);
 
     const EvalT clampedEvalWhite =
-            (EvalT)clamp((int)rawEvalWhite, -kMateEval + 1'000, kMateEval - 1'000);
+            (EvalT)clamp((int)rawEvalWhite.value, -kMateEval + 1'000, kMateEval - 1'000);
 
     return gameState.getSideToMove() == Side::White ? clampedEvalWhite : -clampedEvalWhite;
 }

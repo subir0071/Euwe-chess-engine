@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "king-open-file3");
+            UciFrontEnd uciFrontEnd(engine, "refactor-eval2");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
