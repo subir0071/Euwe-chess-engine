@@ -68,6 +68,10 @@ enum class BoardPosition : std::uint8_t {
     return (BoardPosition)((int)position ^ 56);
 }
 
+[[nodiscard]] FORCE_INLINE constexpr BoardPosition getHorizontalReflection(BoardPosition position) {
+    return (BoardPosition)((int)position ^ 7);
+}
+
 [[nodiscard]] FORCE_INLINE constexpr int getSquareColor(BoardPosition position) {
     const auto [file, rank] = fileRankFromPosition(position);
     return (file + rank) & 1;

@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "change-inlining");
+            UciFrontEnd uciFrontEnd(engine, "pst-flipping");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
