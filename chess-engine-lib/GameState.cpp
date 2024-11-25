@@ -540,6 +540,37 @@ void GameState::unmakeNullMove(const UnmakeMoveInfo& unmakeMoveInfo) {
     pinBitBoard_.reset();
 }
 
+void GameState::removePiece(const BoardPosition position) {
+    previousHashes_.clear();
+    lastReversiblePositionHashIdx_ = 0;
+    pinBitBoard_.reset();
+
+    const ColoredPiece coloredPiece = getPieceOnSquare(position);
+    const Piece piece               = getPiece(coloredPiece);
+    const Side pieceSide            = getSide(coloredPiece);
+
+    MY_ASSERT(piece != Piece::King);
+
+    if (piece == Piece::Pawn) {
+        // Removing a pawn may invalidate en passant. For simplicity, we always invalidate it.
+        if (enPassantTarget_ != BoardPosition::Invalid) {
+            updateHashForEnPassantFile(fileFromPosition(enPassantTarget_), boardHash_);
+            enPassantTarget_ = BoardPosition::Invalid;
+        }
+    } else if (piece == Piece::Rook) {
+        updateRookCastlingRights(position, pieceSide);
+    }
+
+    getPieceOnSquare(position) = ColoredPiece::Invalid;
+    getPieceBitBoard(coloredPiece) &= ~position;
+    if (pieceSide == sideToMove_) {
+        occupancy_.ownPiece &= ~position;
+    } else {
+        occupancy_.enemyPiece &= ~position;
+    }
+    updateHashForPiecePosition(coloredPiece, position, boardHash_);
+}
+
 void GameState::makeCastleMove(const Move& move, const bool reverse) {
     const auto [kingFromFile, kingFromRank] = fileRankFromPosition(move.from);
 

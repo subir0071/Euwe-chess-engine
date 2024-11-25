@@ -77,6 +77,12 @@ class GameState {
     void unmakeMove(const Move& move, const UnmakeMoveInfo& unmakeMoveInfo);
     void unmakeNullMove(const UnmakeMoveInfo& unmakeMoveInfo);
 
+    // Removes a piece from the board.
+    // NOTE: this function should only be used for heuristic purposes; after calling this function,
+    // this object should no longer be used in the normal course of play. This function removes some
+    // internal history (like previous hashes or en passant target).
+    void removePiece(BoardPosition position);
+
     [[nodiscard]] BitBoard getPieceBitBoard(Side side, Piece piece) const {
         return pieceBitBoards_[(int)side][(int)piece];
     }

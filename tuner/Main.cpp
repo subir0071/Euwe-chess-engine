@@ -12,10 +12,10 @@
 
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <print>
 #include <ranges>
 #include <stdexcept>
-#include <fstream>
 
 #include <cstdlib>
 
@@ -33,9 +33,61 @@ std::string getParamsString(const std::array<double, kNumEvalParams>& paramsDoub
          | std::ranges::views::join_with(std::string(", ")) | std::ranges::to<std::string>();
 }
 
-void printResults(const std::array<double, kNumEvalParams>& paramsDouble) {
+std::array<double, kNumPieceTypes - 1> getAveragePieceValues(
+        const EvalParams& params, const std::vector<ScoredPosition>& positions) {
+    std::array<double, kNumPieceTypes - 1> sumPieceValues{};
+    std::array<double, kNumPieceTypes - 1> numPieceOccurrences{};
+
+    const Evaluator evaluator(params);
+
+    for (const auto& [gameState, _] : positions) {
+        const EvalCalcT referenceEval = evaluator.evaluateRaw(gameState);
+
+        for (int sideIdx = 0; sideIdx < kNumSides; ++sideIdx) {
+            const Side side         = (Side)sideIdx;
+            const double sideFactor = side == gameState.getSideToMove() ? 1.0 : -1.0;
+
+            for (int pieceIdx = 0; pieceIdx < kNumPieceTypes - 1; ++pieceIdx) {
+                BitBoard pieceBitBoard = gameState.getPieceBitBoard(side, (Piece)pieceIdx);
+
+                while (pieceBitBoard != BitBoard::Empty) {
+                    const BoardPosition position = popFirstSetPosition(pieceBitBoard);
+
+                    GameState copyState = gameState;
+                    copyState.removePiece(position);
+
+                    const EvalCalcT eval    = evaluator.evaluateRaw(copyState);
+                    const double pieceValue = sideFactor * (referenceEval - eval);
+
+                    sumPieceValues[pieceIdx] += pieceValue;
+                    numPieceOccurrences[pieceIdx] += 1.0;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < kNumPieceTypes - 1; ++i) {
+        sumPieceValues[i] /= numPieceOccurrences[i];
+    }
+
+    return sumPieceValues;
+}
+
+void printAveragePieceValues(const std::array<double, kNumPieceTypes - 1>& averagePieceValues) {
+    std::println("Average piece values:");
+    for (int i = 0; i < kNumPieceTypes - 1; ++i) {
+        std::println("\t{}: {}", pieceToString((Piece)i), averagePieceValues[i]);
+    }
+}
+
+void printResults(
+        const std::array<double, kNumEvalParams>& paramsDouble,
+        const std::vector<ScoredPosition>& scoredPositions) {
     const EvalParams params = evalParamsFromDoubles(paramsDouble);
     std::println("Optimized params:\n{}\n", evalParamsToString(params));
+
+    const auto averagePieceValues = getAveragePieceValues(params, scoredPositions);
+    printAveragePieceValues(averagePieceValues);
 
     std::println("\nOptimized param values: {}", getParamsString(paramsDouble));
 }
@@ -99,7 +151,7 @@ int main(int argc, char** argv) {
     std::println("Post-processing...");
     postProcess(paramsDouble, scoredPositions);
 
-    printResults(paramsDouble);
+    printResults(paramsDouble, scoredPositions);
 
     const std::filesystem::path outputPath = "optimized_params.txt";
     saveResults(paramsDouble, outputPath);
