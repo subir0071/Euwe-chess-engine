@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "pst-flipping");
+            UciFrontEnd uciFrontEnd(engine, "pst-flipping2");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
