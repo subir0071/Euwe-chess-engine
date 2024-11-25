@@ -286,7 +286,7 @@ FORCE_INLINE void updateForKingOpenFiles(
 }
 
 template <bool CalcJacobians>
-FORCE_INLINE void evaluatePiecePositionsForSide(
+void evaluatePiecePositionsForSide(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
         const Side side,
@@ -574,7 +574,7 @@ template <bool CalcJacobians>
 }
 
 template <bool CalcJacobians>
-FORCE_INLINE void correctForDrawish(
+void correctForDrawish(
         const GameState& gameState,
         const Evaluator::EvalCalcParams& params,
         TermWithGradient<CalcJacobians>& whiteEval) {
@@ -643,7 +643,7 @@ FORCE_INLINE void correctForDrawish(
 }
 
 template <bool CalcJacobians>
-FORCE_INLINE void evaluatePawnsForSide(
+void evaluatePawnsForSide(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
         const Side side,

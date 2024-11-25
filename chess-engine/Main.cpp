@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "refactor-eval2");
+            UciFrontEnd uciFrontEnd(engine, "change-inlining");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
