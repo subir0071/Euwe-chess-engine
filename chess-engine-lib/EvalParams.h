@@ -1,9 +1,13 @@
 #pragma once
 
 #include "BoardConstants.h"
+#include "Macros.h"
+#include "MyAssert.h"
 
 #include <array>
 #include <string>
+
+#include <cstddef>
 
 using EvalCalcT = float;
 
@@ -20,6 +24,14 @@ struct EvalParams {
     [[nodiscard]] static EvalParams getDefaultParams();
 
     std::array<EvalCalcT, kNumPieceTypes> phaseMaterialValues;
+
+    std::array<EvalCalcT, 9> oppositeColoredBishopFactor;
+    EvalCalcT singleMinorFactor;
+    EvalCalcT twoKnightsFactor;
+    EvalCalcT rookVsMinorFactor;
+    EvalCalcT rookAndMinorVsRookFactor;
+
+    // From here on out, every term is a TaperedTerm.
 
     std::array<TaperedTerm, kNumPieceTypes> pieceValues;
     PieceSquareTables pieceSquareTablesWhite;
@@ -62,16 +74,25 @@ struct EvalParams {
     std::array<TaperedTerm, kNumPieceTypes> kingAttackWeight;
     std::array<TaperedTerm, 6> numKingAttackersAdjustment;
 
-    std::array<EvalCalcT, 9> oppositeColoredBishopFactor;
-    EvalCalcT singleMinorFactor;
-    EvalCalcT twoKnightsFactor;
-    EvalCalcT rookVsMinorFactor;
-    EvalCalcT rookAndMinorVsRookFactor;
-
     std::array<TaperedTerm, kNumPieceTypes - 1> piecePinnedAdjustment;
 
     TaperedTerm kingOpenFileAdjustment;
     TaperedTerm kingFlankOpenFileAdjustment;
+
+    [[nodiscard]] FORCE_INLINE std::size_t getParamIndex(const EvalCalcT& param) const {
+        const std::byte* thisByte   = (const std::byte*)this;
+        const std::byte* paramByte  = (const std::byte*)&param;
+        const std::ptrdiff_t offset = paramByte - thisByte;
+
+        MY_ASSERT(offset >= 0 && offset < sizeof(*this));
+        MY_ASSERT(offset % sizeof(EvalCalcT) == 0);
+
+        return (std::size_t)(offset / sizeof(EvalCalcT));
+    }
+
+    [[nodiscard]] std::size_t getFirstTaperedTermIndex() const {
+        return getParamIndex(pieceValues[0].early);
+    }
 
   private:
     EvalParams() = default;

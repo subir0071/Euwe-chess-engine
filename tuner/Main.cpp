@@ -129,10 +129,38 @@ std::vector<std::pair<std::filesystem::path, int>> parseArgs(int argc, char** ar
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) try {
     std::srand(42);
 
     const auto pathsAndDropOutRates = parseArgs(argc, argv);
+    //std::vector<std::pair<std::filesystem::path, int>> pathsAndDropOutRates = {
+    //        {R"(D:\annotated-fens\since_virtual_king_mobility_to_tune_old.txt)", 64},
+    //        {R"(D:\annotated-fens\first-tune-attempts-vs-untuned.txt)", 16},
+    //        {R"(D:\annotated-fens\first-fine-tuning.txt)", 32},
+    //        {R"(D:\annotated-fens\more-tapered-eval-terms-tuning.txt)", 16},
+    //        {R"(D:\annotated-fens\bad-castling-bonus-tune.txt)", 16},
+    //        {R"(D:\annotated-fens\attack-defend.txt)", 16},
+    //        {R"(D:\annotated-fens\global-pawn-adjustment.txt)", 8},
+    //        {R"(D:\annotated-fens\queen-pawn-adjustment.txt)", 4},
+    //        {R"(D:\annotated-fens\tune3-phase.txt)", 24},
+    //        {R"(D:\annotated-fens\tune4-phase.txt)", 4},
+    //        {R"(D:\annotated-fens\simpler-pawn-adjustment.txt)", 40},
+    //        {R"(D:\annotated-fens\bishop-enemy-pawn-color-adjustment.txt)", 4},
+    //        {R"(D:\annotated-fens\abs-bishop-pawn-color-adjustment.txt)", 4},
+    //        {R"(D:\annotated-fens\pawn-enemy-king-tropism.txt)", 4},
+    //        {R"(D:\annotated-fens\full-king-tropism.txt)", 4},
+    //        {R"(D:\annotated-fens\full-king-tropism2.txt)", 24},
+    //        {R"(D:\annotated-fens\king-special-pawn-tropism.txt)", 4},
+    //        {R"(D:\annotated-fens\retune-king-special-pawn-tropism.txt)", 2},
+    //        {R"(D:\annotated-fens\control-near-king.txt)", 2},
+    //        {R"(D:\annotated-fens\undo-simpler-pawn-adjustment.txt)", 2},
+    //        {R"(D:\annotated-fens\tune5-phase.txt)", 2},
+    //        {R"(D:\annotated-fens\tuned-drawish-factors.txt)", 1},
+    //        {R"(D:\annotated-fens\pin-eval2.txt)", 4},
+    //        {R"(D:\annotated-fens\pin-eval3.txt)", 2},
+    //        {R"(D:\annotated-fens\king-open-file3.txt)", 1},
+    //        {R"(D:\annotated-fens\pst-flipping.txt)", 1},
+    //};
 
     std::array<double, kNumEvalParams> paramsDouble = getInitialParams();
 
@@ -156,4 +184,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path outputPath = "optimized_params.txt";
     saveResults(paramsDouble, outputPath);
     std::println("Saved optimized params to '{}'", outputPath.string());
+} catch (const std::exception& e) {
+    std::println("Uncaught exception of type {}: {}", typeid(e).name(), e.what());
+    return 1;
 }

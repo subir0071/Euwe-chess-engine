@@ -133,8 +133,8 @@ FORCE_INLINE void updateTaperedTerm(
     eval.late.value += term.late * weight;
 
     if constexpr (CalcJacobians) {
-        eval.early.grad[getParamIndex(params, term.early)] += weight;
-        eval.late.grad[getParamIndex(params, term.late)] += weight;
+        eval.early.grad[params.getParamIndex(term.early)] += weight;
+        eval.late.grad[params.getParamIndex(term.late)] += weight;
     }
 }
 
@@ -147,7 +147,7 @@ FORCE_INLINE void updatePiecePositionEvaluation(
         PiecePositionEvaluation<CalcJacobians>& result) {
     result.phaseMaterial.value += params.phaseMaterialValues[pieceIdx];
     if constexpr (CalcJacobians) {
-        result.phaseMaterial.grad[getParamIndex(params, params.phaseMaterialValues[pieceIdx])] += 1;
+        result.phaseMaterial.grad[params.getParamIndex(params.phaseMaterialValues[pieceIdx])] += 1;
     }
 
     // We manually update value and gradient instead of using updateTaperedTerm to account for piece
@@ -169,8 +169,8 @@ FORCE_INLINE void updatePiecePositionEvaluation(
         result.eval.late.grad[getParamIndex(
                 params, params.pieceSquareTablesWhite[pieceIdx][pstIndex].late)] += 1;
 
-        result.eval.early.grad[getParamIndex(params, params.pieceValues[pieceIdx].early)] += 1;
-        result.eval.late.grad[getParamIndex(params, params.pieceValues[pieceIdx].late)] += 1;
+        result.eval.early.grad[params.getParamIndex(params.pieceValues[pieceIdx].early)] += 1;
+        result.eval.late.grad[params.getParamIndex(params.pieceValues[pieceIdx].late)] += 1;
     }
 }
 
@@ -308,12 +308,12 @@ FORCE_INLINE void updateForKingOpenFiles(
     float flankWeight               = 0.f;
 
     const BoardPosition flank1Position =
-            (BoardPosition)((std::uint8_t)kingPosition - (std::uint8_t)1);
+            (BoardPosition)(((std::uint8_t)kingPosition - (std::uint8_t)1) & 63);
     const BitBoard flank1Mask = getPawnForwardMask(flank1Position, side);
     flankWeight += (float)((neighboringPawns & flank1Mask) == BitBoard::Empty);
 
     const BoardPosition flank2Position =
-            (BoardPosition)((std::uint8_t)kingPosition + (std::uint8_t)1);
+            (BoardPosition)(((std::uint8_t)kingPosition + (std::uint8_t)1) & 63);
     const BitBoard flank2Mask = getPawnForwardMask(flank2Position, side);
     flankWeight += (float)((neighboringPawns & flank2Mask) == BitBoard::Empty);
 
@@ -556,7 +556,7 @@ FORCE_INLINE void modifyForFactor(
     if constexpr (CalcJacobians) {
         whiteEval.grad *= factor;
 
-        auto& dEvalDFactor = whiteEval.grad[getParamIndex(params, factor)];
+        auto& dEvalDFactor = whiteEval.grad[params.getParamIndex(factor)];
         MY_ASSERT(dEvalDFactor == 0);
         dEvalDFactor = whiteEval.value;
     }
@@ -759,12 +759,12 @@ void evaluatePawnsForSide(
                      + 2 * 1 * evalParams.phaseMaterialValues[(int)Piece::King];
     */
     ParamGradient<true> gradient = zeroGradient<true>();
-    gradient[getParamIndex(params, params.phaseMaterialValues[(int)Piece::Pawn])] += 2 * 8;
-    gradient[getParamIndex(params, params.phaseMaterialValues[(int)Piece::Knight])] += 2 * 2;
-    gradient[getParamIndex(params, params.phaseMaterialValues[(int)Piece::Bishop])] += 2 * 2;
-    gradient[getParamIndex(params, params.phaseMaterialValues[(int)Piece::Rook])] += 2 * 2;
-    gradient[getParamIndex(params, params.phaseMaterialValues[(int)Piece::Queen])] += 2 * 1;
-    gradient[getParamIndex(params, params.phaseMaterialValues[(int)Piece::King])] += 2 * 1;
+    gradient[params.getParamIndex(params.phaseMaterialValues[(int)Piece::Pawn])] += 2 * 8;
+    gradient[params.getParamIndex(params.phaseMaterialValues[(int)Piece::Knight])] += 2 * 2;
+    gradient[params.getParamIndex(params.phaseMaterialValues[(int)Piece::Bishop])] += 2 * 2;
+    gradient[params.getParamIndex(params.phaseMaterialValues[(int)Piece::Rook])] += 2 * 2;
+    gradient[params.getParamIndex(params.phaseMaterialValues[(int)Piece::Queen])] += 2 * 1;
+    gradient[params.getParamIndex(params.phaseMaterialValues[(int)Piece::King])] += 2 * 1;
     return gradient;
 }
 

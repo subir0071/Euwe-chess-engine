@@ -3,7 +3,7 @@
     "gtest",
     {
       "name": "ceres",
-      "features": [ "cuda" ]
+      "features": [ "suitesparse" ]
     }
   ]
 }

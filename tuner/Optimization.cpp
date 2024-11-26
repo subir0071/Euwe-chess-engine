@@ -7,25 +7,45 @@
 #include "ceres/ceres.h"
 
 #include <print>
+#include <vector>
 
 #include <cstdlib>
 
 namespace {
 
-struct EvalCostFunctor : ceres::SizedCostFunction<1, 1, kNumEvalParams> {
-    EvalCostFunctor(
-            const ScoredPosition& scoredPosition,
-            const std::shared_ptr<std::vector<int>> constantParamIdxs)
-        : scoredPosition_(scoredPosition), constantParamIdxs_(constantParamIdxs) {}
+using SparsityStructure = std::vector<std::pair<std::size_t, std::size_t>>;
+
+const std::size_t firstTaperedTermIdx = EvalParams::getDefaultParams().getFirstTaperedTermIndex();
+
+struct EvalCostFunctor : ceres::CostFunction {
+    EvalCostFunctor(const ScoredPosition& scoredPosition, SparsityStructure sparsityStructure)
+        : scoredPosition_(scoredPosition), sparsityStructure_(std::move(sparsityStructure)) {
+        auto& parameterBlockSizes = *mutable_parameter_block_sizes();
+
+        parameterBlockSizes.reserve(sparsityStructure_.size() + 1);
+        for (const auto& [blockStart, blockSize] : sparsityStructure_) {
+            parameterBlockSizes.push_back(blockSize);
+        }
+        parameterBlockSizes.push_back(1);
+
+        set_num_residuals(1);
+    }
 
     bool Evaluate(
             double const* const* parameters, double* residuals, double** jacobians) const override {
-        const double* const scaleParam   = parameters[0];
-        const double* const paramsDouble = parameters[1];
+        const double* const scaleParam = parameters[sparsityStructure_.size()];
 
-        const bool needParamJacobians = jacobians != nullptr && jacobians[1] != nullptr;
+        bool needParamJacobians = false;
+        if (jacobians) {
+            for (int sparseIdx = 0; sparseIdx < sparsityStructure_.size(); ++sparseIdx) {
+                if (jacobians[sparseIdx]) {
+                    needParamJacobians = true;
+                    break;
+                }
+            }
+        }
 
-        const Evaluator evaluator(evalParamsFromDoubles(paramsDouble));
+        const Evaluator evaluator(getEvalParams(parameters));
 
         EvalWithGradient evalWithGradient;
 
@@ -42,24 +62,30 @@ struct EvalCostFunctor : ceres::SizedCostFunction<1, 1, kNumEvalParams> {
         if (jacobians) {
             const double s = *scaleParam;
             const double x = evalWithGradient.eval;
-            if (jacobians[0]) {
+            if (jacobians[sparsityStructure_.size()]) {
                 const double power = std::pow(10, x / s);
 
-                jacobians[0][0] = x * std::log(10.) * power / (s * s * (1 + power) * (1 + power));
+                jacobians[sparsityStructure_.size()][0] =
+                        x * std::log(10.) * power / (s * s * (1 + power) * (1 + power));
             }
 
-            if (jacobians[1]) {
+            if (needParamJacobians) {
                 const double negPower = std::pow(10, -x / s);
 
                 const double sigmoidDerivative =
                         std::log(10.) * negPower / (s * (1 + negPower) * (1 + negPower));
 
-                for (int i = 0; i < kNumEvalParams; ++i) {
-                    jacobians[1][i] = -sigmoidDerivative * evalWithGradient.gradient[i];
-                }
+                for (int sparseIdx = 0; sparseIdx < sparsityStructure_.size(); ++sparseIdx) {
+                    if (jacobians[sparseIdx] == nullptr) {
+                        continue;
+                    }
 
-                for (int i : *constantParamIdxs_) {
-                    jacobians[1][i] = 0;
+                    const auto& [blockStart, blockSize] = sparsityStructure_[sparseIdx];
+                    for (int blockIdx = 0; blockIdx < blockSize; ++blockIdx) {
+                        const int denseIdx = blockStart + blockIdx;
+                        jacobians[sparseIdx][blockIdx] =
+                                -sigmoidDerivative * evalWithGradient.gradient[denseIdx];
+                    }
                 }
             }
         }
@@ -67,24 +93,39 @@ struct EvalCostFunctor : ceres::SizedCostFunction<1, 1, kNumEvalParams> {
         return true;
     }
 
+    EvalParams getEvalParams(const double* const* parameters) const {
+        auto paramsArray = evalParamsToArray(EvalParams::getDefaultParams());
+
+        for (int sparseIdx = 0; sparseIdx < sparsityStructure_.size(); ++sparseIdx) {
+            const auto& [blockStart, blockSize] = sparsityStructure_[sparseIdx];
+            for (int blockIdx = 0; blockIdx < blockSize; ++blockIdx) {
+                const int denseIdx    = blockStart + blockIdx;
+                paramsArray[denseIdx] = parameters[sparseIdx][blockIdx];
+            }
+        }
+
+        return evalParamsFromArray(paramsArray);
+    }
+
   private:
     ScoredPosition scoredPosition_;
-    std::shared_ptr<std::vector<int>> constantParamIdxs_;
+    SparsityStructure sparsityStructure_;
 };
 
-std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
-    std::vector<int> constantParamIdxs;
+void setParameterBlocksConstantForSolvingEvalParams(
+        std::array<double, kNumEvalParams>& paramsDouble,
+        bool fixPhaseValues,
+        ceres::Problem& problem) {
 
-    EvalParams params = EvalParams::getDefaultParams();
-    const auto getIdx = [&](const EvalCalcT& member) {
-        return (int)((std::byte*)&member - (std::byte*)&params) / sizeof(EvalCalcT);
+    EvalParams params     = EvalParams::getDefaultParams();
+    const auto getPointer = [&](const EvalCalcT& member) -> double* {
+        return paramsDouble.data() + params.getParamIndex(member);
     };
     const auto setConstant = [&](const EvalCalcT& member) {
-        constantParamIdxs.push_back(getIdx(member));
+        problem.SetParameterBlockConstant(getPointer(member));
     };
     const auto setTaperedTermConstant = [&](const TaperedTerm& term) {
         setConstant(term.early);
-        setConstant(term.late);
     };
 
     // Tempo bonus is incorrectly optimized away.
@@ -124,8 +165,62 @@ std::vector<int> getConstantParamIdxs(bool fixPhaseValues) {
 
     setTaperedTermConstant(params.controlNearEnemyKing[0]);
     setTaperedTermConstant(params.numKingAttackersAdjustment[0]);
+}
 
-    return constantParamIdxs;
+void setAllEvalParameterBlocksConstant(
+        std::array<double, kNumEvalParams>& paramsDouble, ceres::Problem& problem) {
+    // Set all parameters constant except for the scale parameter
+    for (std::size_t i = 0; i < firstTaperedTermIdx; ++i) {
+        problem.SetParameterBlockConstant(paramsDouble.data() + i);
+    }
+    for (std::size_t i = firstTaperedTermIdx; i < kNumEvalParams; i += 2) {
+        problem.SetParameterBlockConstant(paramsDouble.data() + i);
+    }
+}
+
+void setAllEvalParameterBlocksVariable(
+        std::array<double, kNumEvalParams>& paramsDouble, ceres::Problem& problem) {
+    // Set all parameters constant except for the scale parameter
+    for (std::size_t i = 0; i < firstTaperedTermIdx; ++i) {
+        problem.SetParameterBlockVariable(paramsDouble.data() + i);
+    }
+    for (std::size_t i = firstTaperedTermIdx; i < kNumEvalParams; i += 2) {
+        problem.SetParameterBlockVariable(paramsDouble.data() + i);
+    }
+}
+
+SparsityStructure getSparsityStructure(const GameState& gameState, const Evaluator& evaluator) {
+    const EvalWithGradient evalWithGradient = evaluator.evaluateWithGradient(gameState);
+
+    SparsityStructure sparsityStructure;
+    for (std::size_t i = 0; i < firstTaperedTermIdx; ++i) {
+        if (evalWithGradient.gradient[i] != 0) {
+            sparsityStructure.push_back({i, 1});
+        }
+    }
+    for (std::size_t i = firstTaperedTermIdx; i < kNumEvalParams; i += 2) {
+        if (evalWithGradient.gradient[i] != 0 || evalWithGradient.gradient[i + 1] != 0) {
+            sparsityStructure.push_back({i, 2});
+        }
+    }
+
+    return sparsityStructure;
+}
+
+std::vector<double*> getSparseParameterBlocks(
+        double& scaleParam,
+        std::array<double, kNumEvalParams>& paramsDouble,
+        const SparsityStructure& sparsityStructure) {
+    std::vector<double*> sparseParameterBlocks;
+    sparseParameterBlocks.reserve(sparsityStructure.size() + 1);
+
+    for (const auto& [paramIdx, blockSize] : sparsityStructure) {
+        sparseParameterBlocks.push_back(paramsDouble.data() + paramIdx);
+    }
+
+    sparseParameterBlocks.push_back(&scaleParam);
+
+    return sparseParameterBlocks;
 }
 
 void addResiduals(
@@ -136,18 +231,29 @@ void addResiduals(
         const int subsampleRate,
         ceres::Problem& problem) {
     problem.AddParameterBlock(&scaleParam, 1);
-    problem.AddParameterBlock(paramsDouble.data(), kNumEvalParams);
 
-    const auto constantParamIdxs = std::make_shared<std::vector<int>>();
-    *constantParamIdxs           = getConstantParamIdxs(fixPhaseValues);
+    for (std::size_t i = 0; i < firstTaperedTermIdx; ++i) {
+        problem.AddParameterBlock(paramsDouble.data() + i, 1);
+    }
+    for (std::size_t i = firstTaperedTermIdx; i < kNumEvalParams; i += 2) {
+        problem.AddParameterBlock(paramsDouble.data() + i, 2);
+    }
+
+    Evaluator evaluator(evalParamsFromDoubles(paramsDouble));
 
     for (const auto& scoredPosition : scoredPositions) {
         if (std::rand() % subsampleRate != 0) {
             continue;
         }
 
-        ceres::CostFunction* costFunction = new EvalCostFunctor(scoredPosition, constantParamIdxs);
-        problem.AddResidualBlock(costFunction, nullptr, &scaleParam, paramsDouble.data());
+        auto sparsityStructure = getSparsityStructure(scoredPosition.gameState, evaluator);
+
+        auto sparseParameterBlocks =
+                getSparseParameterBlocks(scaleParam, paramsDouble, sparsityStructure);
+
+        ceres::CostFunction* costFunction =
+                new EvalCostFunctor(scoredPosition, std::move(sparsityStructure));
+        problem.AddResidualBlock(costFunction, nullptr, std::move(sparseParameterBlocks));
     }
 }
 
@@ -157,18 +263,11 @@ void solve(ceres::Problem& problem, const bool useTrustRegionMethod) {
     options.num_threads                  = std::thread::hardware_concurrency();
 
     if (useTrustRegionMethod) {
-        options.parameter_tolerance               = 1e-3;
-        options.initial_trust_region_radius       = 1e4;
-        options.max_trust_region_radius           = 1e6;
-        options.dense_linear_algebra_library_type = ceres::CUDA;
-        options.use_mixed_precision_solves        = true;
-        options.max_num_refinement_iterations     = 3;
-
-        if (problem.NumResidualBlocks() > 2e5) {
-            options.linear_solver_type = ceres::DENSE_NORMAL_CHOLESKY;
-        } else {
-            options.linear_solver_type = ceres::DENSE_QR;
-        }
+        options.parameter_tolerance           = 1e-3;
+        options.initial_trust_region_radius   = 1e4;
+        options.max_trust_region_radius       = 1e6;
+        options.max_num_refinement_iterations = 3;
+        options.linear_solver_type            = ceres::SPARSE_NORMAL_CHOLESKY;
     } else {
         options.minimizer_type = ceres::MinimizerType::LINE_SEARCH;
     }
@@ -179,57 +278,27 @@ void solve(ceres::Problem& problem, const bool useTrustRegionMethod) {
 }
 
 void solveScale(
+        ceres::Problem& problem,
         double& scaleParam,
         std::array<double, kNumEvalParams>& paramsDouble,
         const std::vector<ScoredPosition>& scoredPositions) {
-    ceres::Problem problem;
-    addResiduals(
-            scaleParam,
-            paramsDouble,
-            scoredPositions,
-            /*fixPhaseValues*/ true,
-            /*subSampleRate*/ 1,
-            problem);
+    setAllEvalParameterBlocksConstant(paramsDouble, problem);
+    problem.SetParameterBlockVariable(&scaleParam);
 
-    problem.SetParameterBlockConstant(paramsDouble.data());
     solve(problem, /*useTrustRegionMethod*/ true);
 }
 
 void solveParams(
+        ceres::Problem& problem,
         double& scaleParam,
         std::array<double, kNumEvalParams>& paramsDouble,
         const std::vector<ScoredPosition>& scoredPositions,
-        const bool fixPhaseValues,
-        const bool solveSubsampledFirst) {
-    // Solve subsampled problem
-    if (solveSubsampledFirst) {
-        ceres::Problem problem;
-        addResiduals(
-                scaleParam,
-                paramsDouble,
-                scoredPositions,
-                fixPhaseValues,
-                /*subSampleRate*/ 10,
-                problem);
-        problem.SetParameterBlockConstant(&scaleParam);
+        const bool fixPhaseValues) {
+    setAllEvalParameterBlocksVariable(paramsDouble, problem);
+    setParameterBlocksConstantForSolvingEvalParams(paramsDouble, fixPhaseValues, problem);
+    problem.SetParameterBlockConstant(&scaleParam);
 
-        solve(problem, /*useTrustRegionMethod*/ true);
-    }
-
-    // Solve full problem
-    {
-        ceres::Problem problem;
-        addResiduals(
-                scaleParam,
-                paramsDouble,
-                scoredPositions,
-                fixPhaseValues,
-                /*subSampleRate*/ 1,
-                problem);
-        problem.SetParameterBlockConstant(&scaleParam);
-
-        solve(problem, /*useTrustRegionMethod*/ true);
-    }
+    solve(problem, /*useTrustRegionMethod*/ true);
 }
 
 }  // namespace
@@ -240,14 +309,18 @@ void optimize(
         const bool fixPhaseValues) {
     double scaleParam = 400.;
 
-    solveScale(scaleParam, paramsDouble, scoredPositions);
-
-    std::println("Scale param: {}", scaleParam);
-
-    solveParams(
+    ceres::Problem problem;
+    addResiduals(
             scaleParam,
             paramsDouble,
             scoredPositions,
-            fixPhaseValues,
-            /*solveSubsampledFirst*/ false);
+            /*fixPhaseValues*/ true,
+            /*subSampleRate*/ 1,
+            problem);
+
+    solveScale(problem, scaleParam, paramsDouble, scoredPositions);
+
+    std::println("Scale param: {}", scaleParam);
+
+    solveParams(problem, scaleParam, paramsDouble, scoredPositions, fixPhaseValues);
 }
