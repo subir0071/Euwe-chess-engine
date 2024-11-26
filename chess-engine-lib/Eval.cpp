@@ -308,12 +308,12 @@ FORCE_INLINE void updateForKingOpenFiles(
     float flankWeight               = 0.f;
 
     const BoardPosition flank1Position =
-            (BoardPosition)((std::uint8_t)kingPosition - (std::uint8_t)1);
+            (BoardPosition)(((std::uint8_t)kingPosition - (std::uint8_t)1) & 63);
     const BitBoard flank1Mask = getPawnForwardMask(flank1Position, side);
     flankWeight += (float)((neighboringPawns & flank1Mask) == BitBoard::Empty);
 
     const BoardPosition flank2Position =
-            (BoardPosition)((std::uint8_t)kingPosition + (std::uint8_t)1);
+            (BoardPosition)(((std::uint8_t)kingPosition + (std::uint8_t)1) & 63);
     const BitBoard flank2Mask = getPawnForwardMask(flank2Position, side);
     flankWeight += (float)((neighboringPawns & flank2Mask) == BitBoard::Empty);
 
