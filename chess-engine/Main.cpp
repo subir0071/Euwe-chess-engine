@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "tune-3m-positions");
+            UciFrontEnd uciFrontEnd(engine, "tune-phase-2m");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
