@@ -1,18 +1,23 @@
 #include "LoadPositions.h"
 
+#include <execution>
 #include <fstream>
 #include <print>
+#include <ranges>
 #include <sstream>
+#include <syncstream>
 
 #include <cstdlib>
 
-void loadScoredPositions(
+namespace {
+
+std::vector<ScoredPosition> loadScoredPositions(
         const std::filesystem::path& annotatedFensPath,
         const int dropoutRate,
-        std::vector<ScoredPosition>& scoredPositions) {
+        std::ostream* logOutput) {
     std::ifstream in(annotatedFensPath);
 
-    const auto startingSize = scoredPositions.size();
+    std::vector<ScoredPosition> scoredPositions;
 
     std::string inputLine;
     while (std::getline(in, inputLine)) {
@@ -51,5 +56,35 @@ void loadScoredPositions(
         scoredPositions.push_back({gameState, score});
     }
 
-    std::println("Read {} scored positions", scoredPositions.size() - startingSize);
+    if (logOutput) {
+        std::osyncstream out(*logOutput);
+        std::println(
+                out,
+                "Read {} scored positions from {}",
+                scoredPositions.size(),
+                annotatedFensPath.filename().string());
+    }
+
+    return scoredPositions;
+}
+
+}  // namespace
+
+std::vector<ScoredPosition> loadScoredPositions(
+        std::vector<std::pair<std::filesystem::path, int>> pathsAndDropoutRates,
+        std::ostream* logOutput) {
+    std::vector<std::vector<ScoredPosition>> nestedScoredPositions(pathsAndDropoutRates.size());
+
+    std::transform(
+            std::execution::par_unseq,
+            pathsAndDropoutRates.begin(),
+            pathsAndDropoutRates.end(),
+            nestedScoredPositions.begin(),
+            [&](const auto& pathAndDropoutRate) {
+                return loadScoredPositions(
+                        pathAndDropoutRate.first, pathAndDropoutRate.second, logOutput);
+            });
+
+    return std::ranges::views::join(nestedScoredPositions)
+         | std::ranges::to<std::vector<ScoredPosition>>();
 }
