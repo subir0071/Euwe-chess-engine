@@ -152,10 +152,6 @@ void setParameterBlocksConstantForSolvingEvalParams(
         setTaperedTermConstant(params.pieceValues[pieceIdx]);
     }
 
-    // A pawn 1 square away from promotion is always a passed pawn, so this term has a gauge
-    // freedom with the piece-square tables.
-    setTaperedTermConstant(params.passedPawnBonus[1]);
-
     // Fix one value in the pawn adjustment tables to avoid gauge freedoms with the piece values.
     setTaperedTermConstant(params.bishopPawnSameColorAdjustment[4]);
     setTaperedTermConstant(params.bishopEnemyPawnSameColorAdjustment[4]);
@@ -307,7 +303,7 @@ void optimize(
         std::array<double, kNumEvalParams>& paramsDouble,
         const std::vector<ScoredPosition>& scoredPositions,
         const bool fixPhaseValues) {
-    double scaleParam = 400.;
+    double scaleParam = 477.;
 
     ceres::Problem problem;
     addResiduals(

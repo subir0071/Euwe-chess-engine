@@ -695,9 +695,6 @@ void evaluatePawnsForSide(
         const BoardPosition position = popFirstSetPosition(pawnBitBoard);
         const auto [file, rank]      = fileRankFromPosition(position);
 
-        updatePiecePositionEvaluation<CalcJacobians>(
-                params, (int)Piece::Pawn, position, side, result);
-
         const BitBoard passedPawnOpponentMask = getPassedPawnOpponentMask(position, side);
         const BitBoard forwardMask            = getPawnForwardMask(position, side);
         const BitBoard neighborMask           = getPawnNeighborFileMask(position);
@@ -711,17 +708,14 @@ void evaluatePawnsForSide(
         const bool isIsolated    = ownNeighbors == BitBoard::Empty;
 
         int tropismIdx = (int)Piece::Pawn;
+        int pstIdx     = (int)Piece::Pawn;
 
         if (isDoubledPawn) {
             updateTaperedTerm(params, params.doubledPawnPenalty, result.eval, -1);
 
             tropismIdx = EvalParams::kDoubledPawnTropismIdx;
         } else if (isPassedPawn) {
-            const int rank                = rankFromPosition(position);
-            const int distanceToPromotion = side == Side::White ? kRanks - 1 - rank : rank;
-
-            updateTaperedTerm(params, params.passedPawnBonus[distanceToPromotion], result.eval, 1);
-
+            pstIdx     = EvalParams::kPassedPawnPstIdx;
             tropismIdx = EvalParams::kPassedPawnTropismIdx;
         } else if (isIsolated) {
             tropismIdx = EvalParams::kIsolatedPawnTropismIdx;
@@ -730,6 +724,8 @@ void evaluatePawnsForSide(
         if (isIsolated) {
             updateTaperedTerm(params, params.isolatedPawnPenalty, result.eval, -1);
         }
+
+        updatePiecePositionEvaluation<CalcJacobians>(params, pstIdx, position, side, result);
 
         updateForKingTropism(
                 params, ownKingPosition, enemyKingPosition, tropismIdx, position, result.eval);

@@ -16,9 +16,6 @@ struct TaperedTerm {
     EvalCalcT late;
 };
 
-using SquareTable       = std::array<TaperedTerm, kSquares>;
-using PieceSquareTables = std::array<SquareTable, kNumPieceTypes>;
-
 struct EvalParams {
     [[nodiscard]] static EvalParams getEmptyParams();
     [[nodiscard]] static EvalParams getDefaultParams();
@@ -34,9 +31,15 @@ struct EvalParams {
     // From here on out, every term is a TaperedTerm.
 
     std::array<TaperedTerm, kNumPieceTypes> pieceValues;
+
+    static constexpr std::size_t kPassedPawnPstIdx = kNumPieceTypes;
+    static constexpr std::size_t kNumPstPieceTypes = kNumPieceTypes + 1;
+
+    using SquareTable       = std::array<TaperedTerm, kSquares>;
+    using PieceSquareTables = std::array<SquareTable, kNumPstPieceTypes>;
+
     PieceSquareTables pieceSquareTablesWhite;
 
-    std::array<TaperedTerm, 7> passedPawnBonus;
     TaperedTerm doubledPawnPenalty;
     TaperedTerm isolatedPawnPenalty;
 
