@@ -239,9 +239,28 @@ static constexpr auto kTropisms = []() {
     return tropisms;
 }();
 
+static constexpr auto kChebyshevDistances = []() {
+    std::array<std::array<std::uint8_t, kSquares>, kSquares> distances{};
+    for (int from = 0; from < kSquares; ++from) {
+        const auto [fromFile, fromRank] = fileRankFromPosition((BoardPosition)from);
+        for (int to = 0; to < kSquares; ++to) {
+            const auto [toFile, toRank] = fileRankFromPosition((BoardPosition)to);
+            const int distance =
+                    max(constexprAbs(fromFile - toFile), constexprAbs(fromRank - toRank));
+            distances[from][to] = (std::uint8_t)distance;
+        }
+    }
+    return distances;
+}();
+
 [[nodiscard]] FORCE_INLINE EvalCalcT
 getTropism(const BoardPosition aPos, const BoardPosition bPos) {
     return (EvalCalcT)kTropisms[(int)aPos][(int)bPos];
+}
+
+[[nodiscard]] FORCE_INLINE int getChebyshevDistance(
+        const BoardPosition aPos, const BoardPosition bPos) {
+    return (int)kChebyshevDistances[(int)aPos][(int)bPos];
 }
 
 template <bool CalcJacobians>
@@ -677,6 +696,11 @@ void correctForDrawish(
     }
 }
 
+[[nodiscard]] FORCE_INLINE BoardPosition
+getPromotionSquare(const BoardPosition pawnPosition, const Side pawnSide) {
+    return (BoardPosition)((((int)pawnSide - 1) & 56) + ((int)pawnPosition & 7));
+}
+
 template <bool CalcJacobians>
 void evaluatePawnsForSide(
         const Evaluator::EvalCalcParams& params,
@@ -693,7 +717,6 @@ void evaluatePawnsForSide(
 
     while (pawnBitBoard != BitBoard::Empty) {
         const BoardPosition position = popFirstSetPosition(pawnBitBoard);
-        const auto [file, rank]      = fileRankFromPosition(position);
 
         const BitBoard passedPawnOpponentMask = getPassedPawnOpponentMask(position, side);
         const BitBoard forwardMask            = getPawnForwardMask(position, side);
@@ -717,6 +740,17 @@ void evaluatePawnsForSide(
         } else if (isPassedPawn) {
             pstIdx     = EvalParams::kPassedPawnPstIdx;
             tropismIdx = EvalParams::kPassedPawnTropismIdx;
+
+            const BoardPosition promotionSquare = getPromotionSquare(position, side);
+            const int promotionDistance = min(5, getChebyshevDistance(promotionSquare, position));
+
+            const bool isEnemyTurn = side != gameState.getSideToMove();
+            const int kingDistance =
+                    getChebyshevDistance(promotionSquare, enemyKingPosition) - isEnemyTurn;
+
+            const bool outsideKingSquare = promotionDistance < kingDistance;
+            updateTaperedTerm(
+                    params, params.passedPawnOutsideKingSquare, result.eval, outsideKingSquare);
         } else if (isIsolated) {
             tropismIdx = EvalParams::kIsolatedPawnTropismIdx;
         }

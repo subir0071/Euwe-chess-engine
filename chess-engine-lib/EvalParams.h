@@ -82,6 +82,8 @@ struct EvalParams {
     TaperedTerm kingOpenFileAdjustment;
     TaperedTerm kingFlankOpenFileAdjustment;
 
+    TaperedTerm passedPawnOutsideKingSquare;
+
     [[nodiscard]] FORCE_INLINE std::size_t getParamIndex(const EvalCalcT& param) const {
         const std::byte* thisByte   = (const std::byte*)this;
         const std::byte* paramByte  = (const std::byte*)&param;
