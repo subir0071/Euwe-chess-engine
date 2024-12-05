@@ -28,6 +28,8 @@ struct EvalParams {
     EvalCalcT rookVsMinorFactor;
     EvalCalcT rookAndMinorVsRookFactor;
 
+    EvalCalcT hasUnstoppablePawn;
+
     // From here on out, every term is a TaperedTerm.
 
     std::array<TaperedTerm, kNumPieceTypes> pieceValues;

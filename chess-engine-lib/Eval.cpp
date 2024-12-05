@@ -708,12 +708,23 @@ void evaluatePawnsForSide(
         const Side side,
         const BoardPosition ownKingPosition,
         const BoardPosition enemyKingPosition,
+        const BitBoard ownKingArea,
         const BitBoard enemyKingArea,
         PiecePositionEvaluation<CalcJacobians>& result) {
+    const Side enemySide = nextSide(side);
+
     const BitBoard ownPawns   = gameState.getPieceBitBoard(side, Piece::Pawn);
-    const BitBoard enemyPawns = gameState.getPieceBitBoard(nextSide(side), Piece::Pawn);
+    const BitBoard enemyPawns = gameState.getPieceBitBoard(enemySide, Piece::Pawn);
+
+    const bool enemyHasPieces = (gameState.getPieceBitBoard(enemySide, Piece::Knight)
+                                 | gameState.getPieceBitBoard(enemySide, Piece::Bishop)
+                                 | gameState.getPieceBitBoard(enemySide, Piece::Rook)
+                                 | gameState.getPieceBitBoard(enemySide, Piece::Queen))
+                             != BitBoard::Empty;
 
     BitBoard pawnBitBoard = ownPawns;
+
+    bool hasUnstoppablePawn = false;
 
     while (pawnBitBoard != BitBoard::Empty) {
         const BoardPosition position = popFirstSetPosition(pawnBitBoard);
@@ -751,6 +762,11 @@ void evaluatePawnsForSide(
             const bool outsideKingSquare = promotionDistance < kingDistance;
             updateTaperedTerm(
                     params, params.passedPawnOutsideKingSquare, result.eval, outsideKingSquare);
+
+            const bool kingCoversPromotion = (forwardMask & ownKingArea) == forwardMask;
+            const bool pawnIsUnstoppable =
+                    !enemyHasPieces && (outsideKingSquare || kingCoversPromotion);
+            hasUnstoppablePawn |= pawnIsUnstoppable;
         } else if (isIsolated) {
             tropismIdx = EvalParams::kIsolatedPawnTropismIdx;
         }
@@ -776,6 +792,16 @@ void evaluatePawnsForSide(
 
     updateTaperedTerm(
             params, params.kingAttackWeight[(int)Piece::Pawn], result.eval, numAttackedSquares);
+
+    if (hasUnstoppablePawn) {
+        result.eval.early.value += params.hasUnstoppablePawn;
+        result.eval.late.value += params.hasUnstoppablePawn;
+        if constexpr (CalcJacobians) {
+            const auto paramIdx = params.getParamIndex(params.hasUnstoppablePawn);
+            result.eval.early.grad[paramIdx] += 1;
+            result.eval.late.grad[paramIdx] += 1;
+        }
+    }
 }
 
 [[nodiscard]] FORCE_INLINE ParamGradient<true> getMaxPhaseMaterialGradient(
@@ -954,6 +980,7 @@ template <bool CalcJacobians>
             Side::White,
             whiteKingPosition,
             blackKingPosition,
+            whiteKingArea,
             blackKingArea,
             whitePiecePositionEval);
     evaluatePawnsForSide(
@@ -962,6 +989,7 @@ template <bool CalcJacobians>
             Side::Black,
             blackKingPosition,
             whiteKingPosition,
+            blackKingArea,
             whiteKingArea,
             blackPiecePositionEval);
 
