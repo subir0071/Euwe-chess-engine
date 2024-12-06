@@ -9,4 +9,5 @@
 
 std::vector<ScoredPosition> loadScoredPositions(
         std::vector<std::pair<std::filesystem::path, int>> pathsAndDropoutRates,
-        std::ostream* logOutput = nullptr);
+        int additionalDropoutRate = 1,
+        std::ostream* logOutput   = nullptr);

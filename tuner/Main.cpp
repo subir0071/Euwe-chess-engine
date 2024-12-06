@@ -132,6 +132,9 @@ std::vector<std::pair<std::filesystem::path, int>> parseArgs(int argc, char** ar
 }  // namespace
 
 int main(int argc, char** argv) try {
+    constexpr bool kFixPhaseValues       = true;
+    constexpr int kAdditionalDropOutRate = kFixPhaseValues ? 1 : 2;
+
     std::srand(42);
 
     const auto pathsAndDropOutRates = parseArgs(argc, argv);
@@ -140,13 +143,13 @@ int main(int argc, char** argv) try {
 
     std::println("Loading positions...");
     std::vector<ScoredPosition> scoredPositions =
-            loadScoredPositions(pathsAndDropOutRates, &std::cout);
+            loadScoredPositions(pathsAndDropOutRates, kAdditionalDropOutRate, &std::cout);
 
     std::println("Quiescing positions...");
     quiescePositions(scoredPositions);
 
     std::println("Optimizing...");
-    optimize(paramsDouble, scoredPositions, /*fixPhaseValues*/ true);
+    optimize(paramsDouble, scoredPositions, kFixPhaseValues);
 
     std::println("Post-processing...");
     postProcess(paramsDouble, scoredPositions);

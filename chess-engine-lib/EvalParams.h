@@ -20,9 +20,12 @@ struct EvalParams {
     [[nodiscard]] static EvalParams getEmptyParams();
     [[nodiscard]] static EvalParams getDefaultParams();
 
-    std::array<EvalCalcT, kNumPieceTypes> phaseMaterialValues;
+    static constexpr std::size_t kPassedPawnPstIdx = kNumPieceTypes;
+    static constexpr std::size_t kNumPstPieceTypes = kNumPieceTypes + 1;
 
-    std::array<EvalCalcT, 9> oppositeColoredBishopFactor;
+    std::array<EvalCalcT, kNumPstPieceTypes> phaseMaterialValues;
+
+    std::array<EvalCalcT, 5> oppositeColoredBishopFactor;
     EvalCalcT singleMinorFactor;
     EvalCalcT twoKnightsFactor;
     EvalCalcT rookVsMinorFactor;
@@ -35,14 +38,12 @@ struct EvalParams {
     // Note: piece values are unused by eval; only used for heuristics in search.
     std::array<TaperedTerm, kNumPieceTypes> pieceValues;
 
-    static constexpr std::size_t kPassedPawnPstIdx = kNumPieceTypes;
-    static constexpr std::size_t kNumPstPieceTypes = kNumPieceTypes + 1;
-
     using SquareTable       = std::array<TaperedTerm, kSquares>;
     using PieceSquareTables = std::array<SquareTable, kNumPstPieceTypes>;
 
     PieceSquareTables pieceSquareTables;
 
+    TaperedTerm connectedPassedPawnBonus;
     TaperedTerm doubledPawnPenalty;
     TaperedTerm isolatedPawnPenalty;
 

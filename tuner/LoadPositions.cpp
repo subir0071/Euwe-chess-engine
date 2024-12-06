@@ -72,6 +72,7 @@ std::vector<ScoredPosition> loadScoredPositions(
 
 std::vector<ScoredPosition> loadScoredPositions(
         std::vector<std::pair<std::filesystem::path, int>> pathsAndDropoutRates,
+        const int additionalDropOutRate,
         std::ostream* logOutput) {
     std::vector<std::vector<ScoredPosition>> nestedScoredPositions(pathsAndDropoutRates.size());
 
@@ -82,7 +83,9 @@ std::vector<ScoredPosition> loadScoredPositions(
             nestedScoredPositions.begin(),
             [&](const auto& pathAndDropoutRate) {
                 return loadScoredPositions(
-                        pathAndDropoutRate.first, pathAndDropoutRate.second, logOutput);
+                        pathAndDropoutRate.first,
+                        pathAndDropoutRate.second * additionalDropOutRate,
+                        logOutput);
             });
 
     return std::ranges::views::join(nestedScoredPositions)

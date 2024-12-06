@@ -117,8 +117,8 @@ void setParameterBlocksConstantForSolvingEvalParams(
         bool fixPhaseValues,
         ceres::Problem& problem) {
 
-    EvalParams params     = EvalParams::getDefaultParams();
-    const auto getPointer = [&](const EvalCalcT& member) -> double* {
+    const EvalParams params = EvalParams::getDefaultParams();
+    const auto getPointer   = [&](const EvalCalcT& member) -> double* {
         return paramsDouble.data() + params.getParamIndex(member);
     };
     const auto setConstant = [&](const EvalCalcT& member) {
@@ -133,8 +133,8 @@ void setParameterBlocksConstantForSolvingEvalParams(
 
     if (fixPhaseValues) {
         // Fix phase material values to avoid bad convergence
-        for (int pieceIdx = 0; pieceIdx < kNumPieceTypes; ++pieceIdx) {
-            setConstant(params.phaseMaterialValues[pieceIdx]);
+        for (const auto& phaseMaterialValue : params.phaseMaterialValues) {
+            setConstant(phaseMaterialValue);
         }
     } else {
         // Fix one of the phase material values to fix the scale of the phase material values.
@@ -161,6 +161,11 @@ void setParameterBlocksConstantForSolvingEvalParams(
 
     setTaperedTermConstant(params.controlNearEnemyKing[0]);
     setTaperedTermConstant(params.numKingAttackersAdjustment[0]);
+
+    // For opposite colored bishop endgames with a large pawn delta we don't have enough data.
+    // And fixing it to a factor of 1 is ok: the large pawn delta will give a sufficiently high
+    // score to indicate a win.
+    setConstant(params.oppositeColoredBishopFactor.back());
 }
 
 void setAllEvalParameterBlocksConstant(

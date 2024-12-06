@@ -604,9 +604,10 @@ template <bool CalcJacobians>
     const int blackPawns = popCount(gameState.getPieceBitBoard(Side::Black, Piece::Pawn));
 
     const int pawnDelta = std::abs(whitePawns - blackPawns);
+    const int factorIdx = min(pawnDelta, (int)params.oppositeColoredBishopFactor.size() - 1);
 
     modifyForFactor<CalcJacobians>(
-            params, params.oppositeColoredBishopFactor[pawnDelta], whiteEval);
+            params, params.oppositeColoredBishopFactor[factorIdx], whiteEval);
 
     return true;
 }
@@ -709,9 +710,11 @@ void evaluatePawnsForSide(
     BitBoard pawnBitBoard = ownPawns;
 
     bool hasUnstoppablePawn = false;
+    std::array<EvalCalcT, kFiles + 2> filePassedPawnWeight{};
 
     while (pawnBitBoard != BitBoard::Empty) {
         const BoardPosition position = popFirstSetPosition(pawnBitBoard);
+        const int file               = fileFromPosition(position);
 
         const BitBoard passedPawnOpponentMask = getPassedPawnOpponentMask(position, side);
         const BitBoard forwardMask            = getPawnForwardMask(position, side);
@@ -751,6 +754,16 @@ void evaluatePawnsForSide(
             const bool pawnIsUnstoppable =
                     !enemyHasPieces && (outsideKingSquare || kingCoversPromotion);
             hasUnstoppablePawn |= pawnIsUnstoppable;
+
+            const std::size_t passedPawnWeightIdx     = file + 1;
+            filePassedPawnWeight[passedPawnWeightIdx] = 0.5;
+
+            updateTaperedTerm(
+                    params,
+                    params.connectedPassedPawnBonus,
+                    result.eval,
+                    filePassedPawnWeight[passedPawnWeightIdx - 1]
+                            + filePassedPawnWeight[passedPawnWeightIdx + 1]);
         } else if (isIsolated) {
             tropismIdx = EvalParams::kIsolatedPawnTropismIdx;
         }
