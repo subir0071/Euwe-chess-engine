@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "has-unstoppable-pawn");
+            UciFrontEnd uciFrontEnd(engine, "fix-eval-scale-inflation");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

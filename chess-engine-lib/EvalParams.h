@@ -32,6 +32,7 @@ struct EvalParams {
 
     // From here on out, every term is a TaperedTerm.
 
+    // Note: piece values are unused by eval; only used for heuristics in search.
     std::array<TaperedTerm, kNumPieceTypes> pieceValues;
 
     static constexpr std::size_t kPassedPawnPstIdx = kNumPieceTypes;
@@ -40,7 +41,7 @@ struct EvalParams {
     using SquareTable       = std::array<TaperedTerm, kSquares>;
     using PieceSquareTables = std::array<SquareTable, kNumPstPieceTypes>;
 
-    PieceSquareTables pieceSquareTablesWhite;
+    PieceSquareTables pieceSquareTables;
 
     TaperedTerm doubledPawnPenalty;
     TaperedTerm isolatedPawnPenalty;

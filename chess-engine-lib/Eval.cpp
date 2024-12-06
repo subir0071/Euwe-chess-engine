@@ -12,8 +12,6 @@
 #include <utility>
 
 namespace {
-
-using PstMapping       = std::array<std::int8_t, kSquares>;
 using PstMappingBySide = std::array<PstMapping, kNumSides>;
 
 struct PstMappings {
@@ -150,9 +148,6 @@ FORCE_INLINE void updatePiecePositionEvaluation(
         result.phaseMaterial.grad[params.getParamIndex(params.phaseMaterialValues[pieceIdx])] += 1;
     }
 
-    // We manually update value and gradient instead of using updateTaperedTerm to account for piece
-    // values being folded into the stored PSTs.
-
     int pstIndex;
     if constexpr (IsKing) {
         pstIndex = (int)((*result.pstIndexKing)[(int)position]);
@@ -160,18 +155,7 @@ FORCE_INLINE void updatePiecePositionEvaluation(
         pstIndex = (int)((*result.pstIndex)[(int)position]);
     }
 
-    result.eval.early.value += params.pieceSquareTablesWhite[pieceIdx][pstIndex].early;
-    result.eval.late.value += params.pieceSquareTablesWhite[pieceIdx][pstIndex].late;
-
-    if constexpr (CalcJacobians) {
-        result.eval.early.grad[getParamIndex(
-                params, params.pieceSquareTablesWhite[pieceIdx][pstIndex].early)] += 1;
-        result.eval.late.grad[getParamIndex(
-                params, params.pieceSquareTablesWhite[pieceIdx][pstIndex].late)] += 1;
-
-        result.eval.early.grad[params.getParamIndex(params.pieceValues[pieceIdx].early)] += 1;
-        result.eval.late.grad[params.getParamIndex(params.pieceValues[pieceIdx].late)] += 1;
-    }
+    updateTaperedTerm(params, params.pieceSquareTables[pieceIdx][pstIndex], result.eval, 1);
 }
 
 template <bool CalcJacobians>
@@ -909,6 +893,49 @@ template <bool CalcJacobians>
     return result;
 }
 
+FORCE_INLINE void getPstMapping(
+        const BoardPosition whiteKingPosition,
+        const BoardPosition blackKingPosition,
+        const PstMapping*& whiteMapping,
+        const PstMapping*& whiteKingMapping,
+        const PstMapping*& blackMapping,
+        const PstMapping*& blackKingMapping) {
+    const bool whiteKingIsOnQueenSide = fileFromPosition(whiteKingPosition) < 4;
+    const bool blackKingIsOnQueenSide = fileFromPosition(blackKingPosition) < 4;
+
+    if (!whiteKingIsOnQueenSide && !blackKingIsOnQueenSide) {
+        // Both on king side: default
+        whiteMapping     = &kPstMappings.defaultIdx[0];
+        whiteKingMapping = &kPstMappings.defaultIdx[0];
+
+        blackMapping     = &kPstMappings.defaultIdx[1];
+        blackKingMapping = &kPstMappings.defaultIdx[1];
+    } else if (whiteKingIsOnQueenSide && !blackKingIsOnQueenSide) {
+        // White is on queen side: use flipped white mapping for pieces, and fully flipped mapping
+        // for black king
+        whiteMapping     = &kPstMappings.whiteSideFlipped[0];
+        whiteKingMapping = &kPstMappings.defaultIdx[0];
+
+        blackMapping     = &kPstMappings.whiteSideFlipped[1];
+        blackKingMapping = &kPstMappings.bothSidesFlipped[1];
+    } else if (!whiteKingIsOnQueenSide && blackKingIsOnQueenSide) {
+        // Black is on queen side: use flipped black mapping for pieces, and fully flipped mapping
+        // for white king
+        whiteMapping     = &kPstMappings.blackSideFlipped[0];
+        whiteKingMapping = &kPstMappings.bothSidesFlipped[0];
+
+        blackMapping     = &kPstMappings.blackSideFlipped[1];
+        blackKingMapping = &kPstMappings.defaultIdx[1];
+    } else {  // whiteKingIsOnQueenSide && blackKingIsOnQueenSide
+        // Both on queen side: use fully flipped mapping for both sides
+        whiteMapping     = &kPstMappings.bothSidesFlipped[0];
+        whiteKingMapping = &kPstMappings.bothSidesFlipped[0];
+
+        blackMapping     = &kPstMappings.bothSidesFlipped[1];
+        blackKingMapping = &kPstMappings.bothSidesFlipped[1];
+    }
+}
+
 template <bool CalcJacobians>
 [[nodiscard]] FORCE_INLINE TermWithGradient<CalcJacobians> evaluateForWhite(
         const Evaluator::EvalCalcParams& params, const GameState& gameState) {
@@ -937,42 +964,15 @@ template <bool CalcJacobians>
     blackPiecePositionEval.kingAttack       = kingOverlap;
     blackPiecePositionEval.numKingAttackers = kingsAttackEachOther;
 
-    const bool whiteKingIsOnQueenSide = fileFromPosition(whiteKingPosition) < 4;
-    const bool blackKingIsOnQueenSide = fileFromPosition(blackKingPosition) < 4;
-
-    if (!whiteKingIsOnQueenSide && !blackKingIsOnQueenSide) {
-        // Both on king side: default
-        whitePiecePositionEval.pstIndex     = &kPstMappings.defaultIdx[0];
-        whitePiecePositionEval.pstIndexKing = &kPstMappings.defaultIdx[0];
-
-        blackPiecePositionEval.pstIndex     = &kPstMappings.defaultIdx[1];
-        blackPiecePositionEval.pstIndexKing = &kPstMappings.defaultIdx[1];
-    } else if (whiteKingIsOnQueenSide && !blackKingIsOnQueenSide) {
-        // White is on queen side: use flipped white mapping for pieces, and fully flipped mapping
-        // for black king
-        whitePiecePositionEval.pstIndex     = &kPstMappings.whiteSideFlipped[0];
-        whitePiecePositionEval.pstIndexKing = &kPstMappings.defaultIdx[0];
-
-        blackPiecePositionEval.pstIndex     = &kPstMappings.whiteSideFlipped[1];
-        blackPiecePositionEval.pstIndexKing = &kPstMappings.bothSidesFlipped[1];
-    } else if (!whiteKingIsOnQueenSide && blackKingIsOnQueenSide) {
-        // Black is on queen side: use flipped black mapping for pieces, and fully flipped mapping
-        // for white king
-        whitePiecePositionEval.pstIndex     = &kPstMappings.blackSideFlipped[0];
-        whitePiecePositionEval.pstIndexKing = &kPstMappings.bothSidesFlipped[0];
-
-        blackPiecePositionEval.pstIndex     = &kPstMappings.blackSideFlipped[1];
-        blackPiecePositionEval.pstIndexKing = &kPstMappings.defaultIdx[1];
-    } else {  // whiteKingIsOnQueenSide && blackKingIsOnQueenSide
-        // Both on queen side: use fully flipped mapping for both sides
-        whitePiecePositionEval.pstIndex     = &kPstMappings.bothSidesFlipped[0];
-        whitePiecePositionEval.pstIndexKing = &kPstMappings.bothSidesFlipped[0];
-
-        blackPiecePositionEval.pstIndex     = &kPstMappings.bothSidesFlipped[1];
-        blackPiecePositionEval.pstIndexKing = &kPstMappings.bothSidesFlipped[1];
-    }
-
     // No need to add king attack weight for the king itself: that would be symmetric.
+
+    getPstMapping(
+            whiteKingPosition,
+            blackKingPosition,
+            whitePiecePositionEval.pstIndex,
+            whitePiecePositionEval.pstIndexKing,
+            blackPiecePositionEval.pstIndex,
+            blackPiecePositionEval.pstIndexKing);
 
     evaluatePawnsForSide(
             params,
@@ -1119,16 +1119,6 @@ Evaluator::EvalCalcParams::EvalCalcParams(const EvalParams& evalParams) : EvalPa
                       + 2 * 2 * evalParams.phaseMaterialValues[(int)Piece::Rook]
                       + 2 * 1 * evalParams.phaseMaterialValues[(int)Piece::Queen]
                       + 2 * 1 * evalParams.phaseMaterialValues[(int)Piece::King];
-
-    // Fold piece values into PSTs for more efficient calculation.
-    // We still use the piece values to subtract this back out in getPieceSquareValue.
-    for (int pieceIdx = 0; pieceIdx < kNumPieceTypes; ++pieceIdx) {
-        for (int posIdx = 0; posIdx < kSquares; ++posIdx) {
-            pieceSquareTablesWhite[pieceIdx][posIdx].early += pieceValues[pieceIdx].early;
-
-            pieceSquareTablesWhite[pieceIdx][posIdx].late += pieceValues[pieceIdx].late;
-        }
-    }
 }
 
 Evaluator::Evaluator() : Evaluator(EvalParams::getDefaultParams()) {}
@@ -1137,16 +1127,16 @@ Evaluator::Evaluator(const EvalParams& params) : params_(params) {}
 
 FORCE_INLINE int Evaluator::getPieceSquareValue(
         const Piece piece, BoardPosition position, const Side side) const {
-    // Subtract out the piece values that we folded into the PSTs. That way the returned value is a
-    // good representation of how good this square is for the given piece, which is useful for
-    // heuristics in the search.
+    // Subtract out the piece values from the PSTs. That way the returned value is a good
+    // representation of how good this square is for the given piece, which is useful for heuristics
+    // in the search.
     // We also choose the early values. The values returned by this function are used for history
     // heuristic initialization, so that makes sense. They're also used for move ordering for which
     // the choice is perhaps a bit arbitrary.
 
     const int squareIndex = kPstMappings.defaultIdx[(int)side][(int)position];
 
-    return (int)params_.pieceSquareTablesWhite[(int)piece][squareIndex].early
+    return (int)params_.pieceSquareTables[(int)piece][squareIndex].early
          - params_.pieceValues[(int)piece].early;
 }
 
@@ -1201,4 +1191,24 @@ FORCE_INLINE EvalT evaluateNoLegalMoves(const GameState& gameState) {
 
     // We're not in check and there are no legal moves so this is a stalemate.
     return 0;
+}
+
+FORCE_INLINE void getPstMapping(
+        const GameState& gameState,
+        const PstMapping*& whiteMapping,
+        const PstMapping*& whiteKingMapping,
+        const PstMapping*& blackMapping,
+        const PstMapping*& blackKingMapping) {
+    const BoardPosition whiteKingPosition =
+            getFirstSetPosition(gameState.getPieceBitBoard(Side::White, Piece::King));
+    const BoardPosition blackKingPosition =
+            getFirstSetPosition(gameState.getPieceBitBoard(Side::Black, Piece::King));
+
+    getPstMapping(
+            whiteKingPosition,
+            blackKingPosition,
+            whiteMapping,
+            whiteKingMapping,
+            blackMapping,
+            blackKingMapping);
 }

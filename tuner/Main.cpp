@@ -24,6 +24,7 @@ namespace {
 
 std::array<double, kNumEvalParams> getInitialParams() {
     const EvalParams defaultParams = EvalParams::getDefaultParams();
+
     std::println("Initial params:\n{}\n\n", evalParamsToString(defaultParams));
 
     return evalParamsToDoubles(defaultParams);

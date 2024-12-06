@@ -303,7 +303,7 @@ void optimize(
         std::array<double, kNumEvalParams>& paramsDouble,
         const std::vector<ScoredPosition>& scoredPositions,
         const bool fixPhaseValues) {
-    double scaleParam = 477.;
+    double scaleParam = 400;
 
     ceres::Problem problem;
     addResiduals(
