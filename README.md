@@ -24,15 +24,51 @@ Euwe uses a bitboard representation. For move generation it uses
 
 ### Evaluation
 
-Euwe uses a very simple evaluation function that takes into account the following factors:
+Euwe uses a Hand-Crafted Evaluation (HCE) function with automatically tuned parameters. The tuning
+approach is based on [Texel's tuning method](https://www.chessprogramming.org/Texel%27s_Tuning_Method).
+The tuner code is included (see the `tuner` directory) and uses [Ceres](http://ceres-solver.org/)
+for solving the optimization problem. The parameters (see `EvalParams.cpp`) were tuned purely based
+on self-play (using Euwe v1.3.0 as a starting point, which contained hand-tuned parameters).
 
- - Material balance
- - Piece square tables
- - Tapered evaluation
- - Pawn structure: doubled, isolated, and passed pawns
- - Piece quality: bishop pair, 'bad bishops', rooks on (semi-)open files, decreasing value of knights and increasing value of rooks as pawns disappear
- - King safety: king tropism and virtual king mobility
- - Mobility
+Features considered by the evaluation function include:
+
+ - Tapered evaluation.
+ - Material and position using Piece Square Tables.
+     - Piece square tables are (partially) reflected depending on the positions of the kings.
+     - A separate piece square table is used for passed pawns.
+ - Pawn structure:
+     - Isolated pawns.
+     - Doubled pawns.
+     - Passed pawns.
+     - Connected passed pawns.
+     - Rule of the square.
+     - Unstoppable passed pawn.
+ - King safety:
+     - Open files near the king.
+     - King tropism.
+         - Calculated between king and own pieces and king and enemy pieces.
+         - Calculated for each piece type, and for different pawn types (isolated, doubled, passed).
+     - Virtual king mobility.
+     - Enemy controlled squares near the king.
+     - Number of pieces attacking the king.
+     - Attack weight for different piece types.
+ - Piece quality:
+     - Piece mobility.
+     - Value adjustment based on number of own pawns.
+         - For bishop: instead consider own and enemy pawns on the same square color.
+     - Bishop / knight / rook pair.
+     - Rook on (semi-)open file.
+     - Piece defended / attacked.
+     - Piece pinned.
+ - Tempo bonus
+ - Scaling for drawish end-games:
+     - Opposite colored bishop end games, with scaling dependent on the difference in the number of
+       pawns on the board.
+     - Scale down the eval if the stronger side has:
+         - A single minor piece.
+         - Two knights.
+         - A rook versus a minor.
+         - A rook and a minor vs a rook.
 
 ### Search function
 
@@ -106,13 +142,13 @@ console output.
 
 The repository also contains helper projects with additional dependencies:
 
- - The unit tests depend on GTest.
+ - The unit tests depend on [GTest](https://github.com/google/googletest).
  - The tuner depends on [Ceres](http://ceres-solver.org/) and its transitive dependencies. Ceres has
-   also been configured to use CUDA, meaning that an NVCC installation is required.
+   also been configured to use [SuiteSparse](https://github.com/DrTimothyAldenDavis/SuiteSparse).
  - A script for extracting annotated fens from PGNs depends on Python and
    [python-chess](https://python-chess.readthedocs.io/en/latest/).
 
-These dependencies are managed using [vcpkg](https://vcpkg.io/en/).
+These dependencies are managed using [vcpkg](https://vcpkg.io/en/) (for C++) and pip (for Python).
 
 ### Build instructions
 
@@ -125,7 +161,7 @@ These dependencies are managed using [vcpkg](https://vcpkg.io/en/).
    and set CMAKE_TOOLCHAIN_FILE to point to the vcpkg.cmake file.
  - Build the solution. For best playing strength, build in Release mode.
 
-The project has been tested with Visual Studio 2022 Community Edition, version 17.11 (_MSC_VER 1941).
+The project has been tested with Visual Studio 2022 Community Edition, version 17.11 (`_MSC_VER` 1941).
 
 #### Linux
 
@@ -137,9 +173,22 @@ The project has been tested with Visual Studio 2022 Community Edition, version 1
    file, run `cmake --preset linux-x64-release` to build in release mode.
  - Run `cmake --build` on the output directory. E.g., `cmake --build out/build/linux-x64-release/`.
 
-The project has been tested with g++ 14.0.
+The project has been tested with g++ 14.0. Note that in order to compile the tuner, you will need a
+Fortran compiler, such as GFortran; see
+[installation instructions](https://fortran-lang.org/en/learn/os_setup/install_gfortran/). This is
+because the Tuner uses Ceres configured with SuiteSparse, which in turn depends on LAPACK, which is
+written in Fortran.
 
 ## Release history
+
+### Version 2.0
+
+Version 2.0 contains a major overhaul of the evaluation function, which now includes many more
+features and uses automatically tuned parameters.
+
+Approximate strength gain:
+ - On ultra fast time control (3"+0.1"): 123.0 +/- 9.3 Elo.
+ - On CCRL Blitz time control (2'+1"): 174.6 +/- 30.9 Elo.
 
 ### Version 1.3
 
@@ -157,7 +206,7 @@ It also includes several minor improvements:
    - Use rounding to nearest permille for reported hashfull (instead of rounding down).
    - Reset selective depth after each full search to a given depth, instead of keeping a running
      maximum for each 'go' command.
- - Approximate strength gain (on ultrafast time control): 27.9 +/- 7.8 Elo.
+ - Approximate strength gain (on ultra fast time control): 27.9 +/- 7.8 Elo.
 
 ### Version 1.2
 
@@ -170,14 +219,14 @@ It also includes several minor improvements:
    - Mobility
    - Adjust values of knights and rooks based on number of own pawns on the board
  - Add transposition table aging
- - Approximate strength gain (on ultrafast time control): 109.1 +/- 38.2 Elo.
+ - Approximate strength gain (on ultra fast time control): 109.1 +/- 38.2 Elo.
 
 ### Version 1.1
 
  - Several bugfixes, including issues #1 and #2.
  - Adds bishop pair to evaluation.
  - Adds futility pruning to search.
- - Approximate strength gain (on ultrafast time control): 64.8 +/- 28.3 Elo.
+ - Approximate strength gain (on ultra fast time control): 64.8 +/- 28.3 Elo.
 
 ### Version 1.0
 
@@ -201,6 +250,11 @@ The author would like to thank:
    and GitHub Copilot.
  - The LLVM development group for providing valuable free and open source development tools: clang,
    clang-format, and clang-tidy.
+ - The authors and maintainers of the open source libraries used in this project, including
+   [Ceres](http://ceres-solver.org/),
+   [SuiteSparse](https://github.com/DrTimothyAldenDavis/SuiteSparse),
+   [GTest](https://github.com/google/googletest), and
+   [python-chess](https://python-chess.readthedocs.io/en/latest/).
 
 ## License
 

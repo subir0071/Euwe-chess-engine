@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "connected-passed-pawns-phase");
+            UciFrontEnd uciFrontEnd(engine, "Euwe v2.0.0");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
