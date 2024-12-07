@@ -3,9 +3,11 @@
 #include "ScoredPosition.h"
 
 #include <filesystem>
+#include <optional>
+#include <ostream>
 #include <vector>
 
-void loadScoredPositions(
-        const std::filesystem::path& annotatedFensPath,
-        int dropoutRate,
-        std::vector<ScoredPosition>& scoredPositions);
+std::vector<ScoredPosition> loadScoredPositions(
+        std::vector<std::pair<std::filesystem::path, int>> pathsAndDropoutRates,
+        int additionalDropoutRate = 1,
+        std::ostream* logOutput   = nullptr);

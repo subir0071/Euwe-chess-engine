@@ -2,6 +2,9 @@
 
 #include "Utilities.h"
 
+#include "chess-engine-lib/Eval.h"
+#include "chess-engine-lib/PawnMasks.h"
+
 namespace {
 
 double calculateMaxPhaseMaterial(const EvalParams& evalParams) {
@@ -29,6 +32,25 @@ double calculateGamePhase(
     return phaseMaterial / maxPhaseMaterial;
 }
 
+[[nodiscard]] bool isPassedPawn(
+        const GameState& gameState, const Side side, const BoardPosition position) {
+    const Side enemySide = nextSide(side);
+
+    const BitBoard ownPawns   = gameState.getPieceBitBoard(side, Piece::Pawn);
+    const BitBoard enemyPawns = gameState.getPieceBitBoard(enemySide, Piece::Pawn);
+
+    const BitBoard passedPawnOpponentMask = getPassedPawnOpponentMask(position, side);
+    const BitBoard forwardMask            = getPawnForwardMask(position, side);
+
+    const BitBoard opponentBlockers = enemyPawns & passedPawnOpponentMask;
+    const BitBoard ownBlockers      = ownPawns & forwardMask;
+
+    const bool isDoubledPawn = ownBlockers != BitBoard::Empty;
+    const bool isPassedPawn  = !isDoubledPawn && opponentBlockers == BitBoard::Empty;
+
+    return isPassedPawn && !isDoubledPawn;
+}
+
 void extractPieceSquareValues(
         const EvalParams& evalParams,
         const GameState& gameState,
@@ -40,23 +62,38 @@ void extractPieceSquareValues(
     const double earlyFactor = calculateGamePhase(evalParams, maxPhaseMaterial, gameState);
     const double lateFactor  = 1.0 - earlyFactor;
 
+    std::array<const PstMapping*, 2> normalMappingBySide{};
+    std::array<const PstMapping*, 2> kingMappingBySide{};
+
+    getPstMapping(
+            gameState,
+            normalMappingBySide[0],
+            kingMappingBySide[0],
+            normalMappingBySide[1],
+            kingMappingBySide[1]);
+
     for (int sideIdx = 0; sideIdx < kNumSides; ++sideIdx) {
         const Side side = (Side)sideIdx;
         for (int pieceIdx = 0; pieceIdx < kNumPieceTypes; ++pieceIdx) {
             const Piece piece      = (Piece)pieceIdx;
             BitBoard pieceBitBoard = gameState.getPieceBitBoard(side, piece);
 
-            while (pieceBitBoard != BitBoard::Empty) {
-                BoardPosition position = popFirstSetPosition(pieceBitBoard);
+            const PstMapping* mapping = pieceIdx == (int)Piece::King ? kingMappingBySide[sideIdx]
+                                                                     : normalMappingBySide[sideIdx];
 
-                if (side == Side::Black) {
-                    position = getVerticalReflection(position);
+            while (pieceBitBoard != BitBoard::Empty) {
+                const BoardPosition position = popFirstSetPosition(pieceBitBoard);
+
+                if (piece == Piece::Pawn && isPassedPawn(gameState, side, position)) {
+                    continue;
                 }
 
+                const int pstSqIdx = (*mapping)[(int)position];
+
                 const EvalCalcT pieceSquareValueEarly =
-                        evalParams.pieceSquareTablesWhite[pieceIdx][(int)position].early;
+                        evalParams.pieceSquareTables[pieceIdx][pstSqIdx].early;
                 const EvalCalcT pieceSquareValueLate =
-                        evalParams.pieceSquareTablesWhite[pieceIdx][(int)position].late;
+                        evalParams.pieceSquareTables[pieceIdx][pstSqIdx].late;
 
                 summedPieceSquareValuesEarly[pieceIdx] += earlyFactor * pieceSquareValueEarly;
                 numPieceOccurrencesEarly[pieceIdx] += earlyFactor;
@@ -68,11 +105,12 @@ void extractPieceSquareValues(
     }
 }
 
-void updatePieceValuesFromPieceSquare(
+void setPieceValuesFromPieceSquare(
         EvalParams& evalParams, const std::vector<ScoredPosition>& scoredPositions) {
-    // Subtract out the average piece square value and add it to the piece values.
-    // This makes the piece square values a good representation for how good this square is for a
-    // given piece. This is useful for heuristics in the search.
+    // Calculate the piece values as the average piece square value across all positions.
+    // These piece values can then be used for search heuristics. In particular, the difference
+    // between piece square values and the piece values is a good representation of the 'goodnes' of
+    // that square for that piece.
     // We calculate the average across all positions instead of a naive average across all squares,
     // since pieces are not uniformly distributed across the board over the course of a game.
 
@@ -113,13 +151,8 @@ void updatePieceValuesFromPieceSquare(
                     summedPieceSquareValuesLate[pieceIdx] / numPieceOccurrencesLate[pieceIdx];
         }
 
-        evalParams.pieceValues[pieceIdx].early += pieceSquareValueEarly;
-        evalParams.pieceValues[pieceIdx].late += pieceSquareValueLate;
-
-        for (int squareIdx = 0; squareIdx < kSquares; ++squareIdx) {
-            evalParams.pieceSquareTablesWhite[pieceIdx][squareIdx].early -= pieceSquareValueEarly;
-            evalParams.pieceSquareTablesWhite[pieceIdx][squareIdx].late -= pieceSquareValueLate;
-        }
+        evalParams.pieceValues[pieceIdx].early = pieceSquareValueEarly;
+        evalParams.pieceValues[pieceIdx].late  = pieceSquareValueLate;
     }
 }
 
@@ -131,26 +164,23 @@ void zeroOutKingValues(EvalParams& evalParams) {
 void zeroOutUnreachablePawnSquares(EvalParams& evalParams) {
     for (int file = 0; file < kFiles; ++file) {
         const int rank1Position = (int)positionFromFileRank(file, 0);
+        const int rank7Position = (int)positionFromFileRank(file, kRanks - 2);
         const int rank8Position = (int)positionFromFileRank(file, kRanks - 1);
 
-        evalParams.pieceSquareTablesWhite[(int)Piece::Pawn][rank1Position].early = 0.0;
-        evalParams.pieceSquareTablesWhite[(int)Piece::Pawn][rank8Position].early = 0.0;
+        evalParams.pieceSquareTables[(int)Piece::Pawn][rank1Position].early = 0.0;
+        evalParams.pieceSquareTables[(int)Piece::Pawn][rank7Position].early = 0.0;
+        evalParams.pieceSquareTables[(int)Piece::Pawn][rank8Position].early = 0.0;
 
-        evalParams.pieceSquareTablesWhite[(int)Piece::Pawn][rank1Position].late = 0.0;
-        evalParams.pieceSquareTablesWhite[(int)Piece::Pawn][rank8Position].late = 0.0;
+        evalParams.pieceSquareTables[(int)Piece::Pawn][rank1Position].late = 0.0;
+        evalParams.pieceSquareTables[(int)Piece::Pawn][rank7Position].late = 0.0;
+        evalParams.pieceSquareTables[(int)Piece::Pawn][rank8Position].late = 0.0;
+
+        evalParams.pieceSquareTables[EvalParams::kPassedPawnPstIdx][rank1Position].early = 0.0;
+        evalParams.pieceSquareTables[EvalParams::kPassedPawnPstIdx][rank8Position].early = 0.0;
+
+        evalParams.pieceSquareTables[EvalParams::kPassedPawnPstIdx][rank1Position].late = 0.0;
+        evalParams.pieceSquareTables[EvalParams::kPassedPawnPstIdx][rank8Position].late = 0.0;
     }
-}
-
-template <typename T>
-void interlaceValues(T& valuesEarly, T& valuesLate) {
-    constexpr std::size_t kNumElements = sizeof(T) / sizeof(EvalCalcT);
-    std::array<EvalCalcT, kNumElements * 2> valuesInterlaced;
-    for (std::size_t i = 0; i < kNumElements; ++i) {
-        valuesInterlaced[2 * i]     = (reinterpret_cast<EvalCalcT*>(&valuesEarly))[i];
-        valuesInterlaced[2 * i + 1] = (reinterpret_cast<EvalCalcT*>(&valuesLate))[i];
-    }
-
-    std::memcpy(&valuesEarly, valuesInterlaced.data(), sizeof(valuesInterlaced));
 }
 
 }  // namespace
@@ -160,7 +190,7 @@ void postProcess(
         const std::vector<ScoredPosition>& scoredPositions) {
     EvalParams evalParams = evalParamsFromDoubles(paramsDouble);
 
-    updatePieceValuesFromPieceSquare(evalParams, scoredPositions);
+    setPieceValuesFromPieceSquare(evalParams, scoredPositions);
     zeroOutKingValues(evalParams);
     zeroOutUnreachablePawnSquares(evalParams);
 

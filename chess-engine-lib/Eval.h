@@ -13,6 +13,8 @@ struct EvalWithGradient {
     VectorT gradient;
 };
 
+using PstMapping = std::array<std::int8_t, kSquares>;
+
 class Evaluator {
   public:
     struct EvalCalcParams : EvalParams {
@@ -41,3 +43,10 @@ class Evaluator {
 [[nodiscard]] bool isInsufficientMaterial(const GameState& gameState);
 
 [[nodiscard]] EvalT evaluateNoLegalMoves(const GameState& gameState);
+
+void getPstMapping(
+        const GameState& gameState,
+        const PstMapping*& whiteMapping,
+        const PstMapping*& whiteKingMapping,
+        const PstMapping*& blackMapping,
+        const PstMapping*& blackKingMapping);

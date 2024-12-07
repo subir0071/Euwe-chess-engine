@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <print>
 #include <ranges>
 #include <stdexcept>
@@ -23,6 +24,7 @@ namespace {
 
 std::array<double, kNumEvalParams> getInitialParams() {
     const EvalParams defaultParams = EvalParams::getDefaultParams();
+
     std::println("Initial params:\n{}\n\n", evalParamsToString(defaultParams));
 
     return evalParamsToDoubles(defaultParams);
@@ -129,7 +131,10 @@ std::vector<std::pair<std::filesystem::path, int>> parseArgs(int argc, char** ar
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) try {
+    constexpr bool kFixPhaseValues       = true;
+    constexpr int kAdditionalDropOutRate = kFixPhaseValues ? 1 : 2;
+
     std::srand(42);
 
     const auto pathsAndDropOutRates = parseArgs(argc, argv);
@@ -137,16 +142,14 @@ int main(int argc, char** argv) {
     std::array<double, kNumEvalParams> paramsDouble = getInitialParams();
 
     std::println("Loading positions...");
-    std::vector<ScoredPosition> scoredPositions;
-    for (const auto pathAndDropoutRate : pathsAndDropOutRates) {
-        loadScoredPositions(pathAndDropoutRate.first, pathAndDropoutRate.second, scoredPositions);
-    }
+    std::vector<ScoredPosition> scoredPositions =
+            loadScoredPositions(pathsAndDropOutRates, kAdditionalDropOutRate, &std::cout);
 
     std::println("Quiescing positions...");
     quiescePositions(scoredPositions);
 
     std::println("Optimizing...");
-    optimize(paramsDouble, scoredPositions, /*fixPhaseValues*/ true);
+    optimize(paramsDouble, scoredPositions, kFixPhaseValues);
 
     std::println("Post-processing...");
     postProcess(paramsDouble, scoredPositions);
@@ -156,4 +159,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path outputPath = "optimized_params.txt";
     saveResults(paramsDouble, outputPath);
     std::println("Saved optimized params to '{}'", outputPath.string());
+} catch (const std::exception& e) {
+    std::println("Uncaught exception of type {}: {}", typeid(e).name(), e.what());
+    return 1;
 }
