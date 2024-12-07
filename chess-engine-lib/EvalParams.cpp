@@ -5,6 +5,8 @@
 #include <ranges>
 #include <sstream>
 
+#include <cstring>
+
 namespace {
 
 constexpr EvalParamArray kDefaultParams = {
