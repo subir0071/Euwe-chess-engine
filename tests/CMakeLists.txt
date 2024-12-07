@@ -19,14 +19,14 @@ add_executable(tests
 # C++23 standard
 set_property(TARGET tests PROPERTY CXX_STANDARD 23)
 
-# Statically link the runtime libraries.
+# Dynamically link the runtime libraries.
 set_property(TARGET tests PROPERTY
   MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 target_link_libraries(tests
     GTest::GTest
     GTest::Main
-    chess-engine-lib
+    chess-engine-lib-dyn-crt
 )
 
 gtest_discover_tests(tests)
