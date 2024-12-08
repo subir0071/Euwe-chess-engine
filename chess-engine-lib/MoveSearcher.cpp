@@ -184,6 +184,7 @@ namespace {
 [[nodiscard]] FORCE_INLINE int getDepthReduction(
         const Move& move,
         const int moveIdx,
+        const bool moveIsLosing,
         const bool isPvNode,
         const int depth,
         const int extension) {
@@ -203,10 +204,12 @@ namespace {
         return 0;
     }
 
-    // Don't apply reductions to tactical moves.
-    const Piece promotionPiece = getPromotionPiece(move.flags);
-    if (isCapture(move.flags) || promotionPiece == Piece::Queen) {
-        return 0;
+    if (!moveIsLosing) {
+        // Don't apply reductions to tactical moves with positive SEE.
+        const Piece promotionPiece = getPromotionPiece(move.flags);
+        if (isCapture(move.flags) || promotionPiece == Piece::Queen) {
+            return 0;
+        }
     }
 
     // Late Move Reduction (LMR)
@@ -582,7 +585,8 @@ EvalT MoveSearcher::Impl::search(
             }
         }
 
-        const int reduction = getDepthReduction(move, moveIdx, isPvNode, depth, extension);
+        const int reduction = getDepthReduction(
+                move, moveIdx, orderedMoves.lastMoveWasLosing(), isPvNode, depth, extension);
 
         const auto outcome = searchMove(
                 gameState,
