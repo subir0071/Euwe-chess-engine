@@ -5,6 +5,13 @@ cmake_minimum_required (VERSION 3.15)
 
 set (CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_CURRENT_LIST_DIR}/CompilerOptions.cmake")
 
+# Enable Hot Reload for MSVC compilers if supported.
+if (POLICY CMP0141)
+  cmake_policy(SET CMP0141 NEW)
+  set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+    "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug>:EditAndContinue>$<$<CONFIG:RelWithDebInfo>:ProgramDatabase>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
+endif()
+
 project ("Euwe")
 
 # Enable Interprocedural Optimization (Link-time optimization / whole program optimization), if supported.
@@ -28,11 +35,6 @@ endif()
 # Set debug options for MSVC
 if (MSVC)
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/O2 /Ob2 /DNDEBUG")
-    
-    if (POLICY CMP0141)
-        cmake_policy(SET CMP0141 NEW)
-        set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>")
-    endif()
 endif()
 
 enable_testing()
