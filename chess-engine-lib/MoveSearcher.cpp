@@ -464,7 +464,7 @@ EvalT MoveSearcher::Impl::search(
 
     EvalT bestScore = -kInfiniteEval;
     Move bestMove{};
-    bool completedAnySearch = false;
+    int movesSearched = 0;
 
     std::optional<Move> hashMove = std::nullopt;
 
@@ -530,7 +530,7 @@ EvalT MoveSearcher::Impl::search(
             return bestScore;
         }
 
-        completedAnySearch = true;
+        ++movesSearched;
 
         if (outcome == SearchMoveOutcome::Cutoff) {
             // Fail high
@@ -567,10 +567,10 @@ EvalT MoveSearcher::Impl::search(
     }
 
     auto orderedMoves =
-            moveOrderer_.orderMoves(std::move(moves), hashMove, gameState, lastMove, ply, stack);
+            moveOrderer_.orderMoves(std::move(moves), hashMove, gameState, lastMove, ply);
 
     while (orderedMoves.hasMoreMoves()) {
-        const auto [move, moveIdx] = orderedMoves.getNextBestMove(gameState);
+        const auto move = orderedMoves.getNextBestMove(gameState);
 
         // Futility pruning
         static constexpr EvalT futilityMarginPerDepth = 140;
@@ -586,7 +586,7 @@ EvalT MoveSearcher::Impl::search(
         }
 
         const int reduction = getDepthReduction(
-                move, moveIdx, orderedMoves.lastMoveWasLosing(), isPvNode, depth, extension);
+                move, movesSearched, orderedMoves.lastMoveWasLosing(), isPvNode, depth, extension);
 
         const auto outcome = searchMove(
                 gameState,
@@ -601,10 +601,10 @@ EvalT MoveSearcher::Impl::search(
                 bestMove,
                 lastMove,
                 lastNullMovePly,
-                /*useScoutSearch =*/isPvNode && completedAnySearch);
+                /*useScoutSearch =*/isPvNode && (movesSearched > 0));
 
         if (outcome != SearchMoveOutcome::Interrupted) {
-            completedAnySearch = true;
+            ++movesSearched;
         }
 
         if (outcome != SearchMoveOutcome::Continue) {
@@ -612,7 +612,7 @@ EvalT MoveSearcher::Impl::search(
         }
     }
 
-    if (completedAnySearch) {
+    if (movesSearched > 0) {
         // If we fully evaluated any positions, update the ttable.
         MY_ASSERT(bestMove.pieceToMove != Piece::Invalid);
         updateTTable(
@@ -835,8 +835,7 @@ EvalT MoveSearcher::Impl::quiesce(
         return bestScore;
     }
 
-    auto orderedMoves =
-            moveOrderer_.orderMovesQuiescence(std::move(moves), hashMove, gameState, stack);
+    auto orderedMoves = moveOrderer_.orderMovesQuiescence(std::move(moves), hashMove, gameState);
 
     while (orderedMoves.hasMoreMoves()) {
         const Move move = orderedMoves.getNextBestMoveQuiescence();

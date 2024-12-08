@@ -54,20 +54,14 @@ scoreQueenPromotion(const Move& move, const GameState& gameState) {
 }  // namespace
 
 FORCE_INLINE OrderedMoves::OrderedMoves(
-        StackVector<Move>&& moves,
-        StackVector<MoveEvalT>&& moveScores,
-        const int firstMoveIdx,
-        StackOfVectors<Move>& moveStack)
+        StackVector<Move>&& moves, StackVector<MoveEvalT>&& moveScores, const int firstMoveIdx)
     : moves_(std::move(moves)),
-      losingMoves_(moveStack.makeStackVector()),
       moveScores_(std::move(moveScores)),
       currentMoveIdx_(firstMoveIdx),
-      numLosingMoves_(0) {
-    losingMoves_.resize(moves_.size());
-}
+      firstLosingMoveIdx_(moves_.size()) {}
 
-FORCE_INLINE std::pair<Move, int> OrderedMoves::getNextBestMove(const GameState& gameState) {
-    while (currentMoveIdx_ < moves_.size()) {
+FORCE_INLINE Move OrderedMoves::getNextBestMove(const GameState& gameState) {
+    while (currentMoveIdx_ < firstLosingMoveIdx_) {
         // Select best move based on pre-calculated scores using a simple linear search.
         // Then do a 'destructive swap' with the first move in the list and return the best move.
         // This basically ends up doing a selection sort when called repeatedly, except that we don't
@@ -76,7 +70,7 @@ FORCE_INLINE std::pair<Move, int> OrderedMoves::getNextBestMove(const GameState&
         int bestMoveIdx         = -1;
         MoveEvalT bestMoveScore = std::numeric_limits<MoveEvalT>::lowest();
 
-        for (int moveIdx = currentMoveIdx_; moveIdx < moveScores_.size(); ++moveIdx) {
+        for (int moveIdx = currentMoveIdx_; moveIdx < firstLosingMoveIdx_; ++moveIdx) {
             if (moveScores_[moveIdx] > bestMoveScore) {
                 bestMoveScore = moveScores_[moveIdx];
                 bestMoveIdx   = moveIdx;
@@ -85,39 +79,37 @@ FORCE_INLINE std::pair<Move, int> OrderedMoves::getNextBestMove(const GameState&
 
         const Move bestMove = moves_[bestMoveIdx];
 
-        // 'Destructive swap'
-        moves_[bestMoveIdx]      = moves_[currentMoveIdx_];
-        moveScores_[bestMoveIdx] = moveScores_[currentMoveIdx_];
-        ++currentMoveIdx_;
-
         if (isCapture(bestMove.flags)) {
             const bool isNonLosing = staticExchangeEvaluationNonLosing(gameState, bestMove);
 
             if (!isNonLosing) {
                 // This move is losing based on SEE. Move it to the losing moves list, and find the next
                 // best move.
-                losingMoves_[numLosingMoves_] = bestMove;
-                ++numLosingMoves_;
+                --firstLosingMoveIdx_;
+                std::swap(moves_[bestMoveIdx], moves_[firstLosingMoveIdx_]);
+                std::swap(moveScores_[bestMoveIdx], moveScores_[firstLosingMoveIdx_]);
                 continue;
             }
         }
 
-        return {bestMove, currentMoveIdx_ - 1 - numLosingMoves_};
+        std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
+        std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
+        ++currentMoveIdx_;
+
+        return bestMove;
     }
 
     // We've exhausted all the non-losing moves. Return the best losing move.
-    // Here, 'best' is based on the original move scoring, since losing moves were inserted
-    // best-first.
-
-    MY_ASSERT(numLosingMoves_ > 0);
-    const int losingMoveIdx = currentMoveIdx_ - moves_.size();
-    MY_ASSERT(losingMoveIdx >= 0 && losingMoveIdx < numLosingMoves_);
-
-    const int sequentialMoveIdx = currentMoveIdx_ - numLosingMoves_;
+    // Here, 'best' is based on the original move scoring.
+    // Losing moves are inserted in reverse order of score, so we need to start at the back.
+    const int losingMoveIdx     = currentMoveIdx_ - firstLosingMoveIdx_;
+    const int lastLosingMoveIdx = moves_.size() - 1;
+    const int listIdx           = lastLosingMoveIdx - losingMoveIdx;
 
     ++currentMoveIdx_;
 
-    return {losingMoves_[losingMoveIdx], sequentialMoveIdx};
+    MY_ASSERT(listIdx >= firstLosingMoveIdx_ && listIdx < moves_.size());
+    return moves_[listIdx];
 }
 
 FORCE_INLINE Move OrderedMoves::getNextBestMoveQuiescence() {
@@ -147,11 +139,11 @@ FORCE_INLINE Move OrderedMoves::getNextBestMoveQuiescence() {
 }
 
 FORCE_INLINE bool OrderedMoves::hasMoreMoves() const {
-    return currentMoveIdx_ < moves_.size() + numLosingMoves_;
+    return currentMoveIdx_ < moves_.size();
 }
 
 FORCE_INLINE bool OrderedMoves::lastMoveWasLosing() const {
-    return currentMoveIdx_ - 1 >= moves_.size();
+    return currentMoveIdx_ - 1 >= firstLosingMoveIdx_;
 }
 
 MoveOrderer::MoveOrderer(const Evaluator& evaluator) : evaluator_(evaluator) {
@@ -176,8 +168,7 @@ FORCE_INLINE OrderedMoves MoveOrderer::orderMoves(
         const std::optional<Move>& moveToIgnore,
         const GameState& gameState,
         const Move& lastMove,
-        const int ply,
-        StackOfVectors<Move>& moveStack) const {
+        const int ply) const {
     int moveIdx = 0;
     if (moveToIgnore) {
         ignoreMove(*moveToIgnore, moves, moveIdx);
@@ -185,14 +176,13 @@ FORCE_INLINE OrderedMoves MoveOrderer::orderMoves(
 
     auto moveScores = scoreMoves(moves, moveIdx, gameState, lastMove, ply);
 
-    return OrderedMoves(std::move(moves), std::move(moveScores), moveIdx, moveStack);
+    return OrderedMoves(std::move(moves), std::move(moveScores), moveIdx);
 }
 
 FORCE_INLINE OrderedMoves MoveOrderer::orderMovesQuiescence(
         StackVector<Move>&& moves,
         const std::optional<Move>& moveToIgnore,
-        const GameState& gameState,
-        StackOfVectors<Move>& moveStack) const {
+        const GameState& gameState) const {
     int moveIdx = 0;
     if (moveToIgnore) {
         ignoreMove(*moveToIgnore, moves, moveIdx);
@@ -200,7 +190,7 @@ FORCE_INLINE OrderedMoves MoveOrderer::orderMovesQuiescence(
 
     auto moveScores = scoreMovesQuiesce(moves, moveIdx, gameState);
 
-    return OrderedMoves(std::move(moves), std::move(moveScores), moveIdx, moveStack);
+    return OrderedMoves(std::move(moves), std::move(moveScores), moveIdx);
 }
 
 void MoveOrderer::newGame() {

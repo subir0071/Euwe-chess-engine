@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "see-lmr");
+            UciFrontEnd uciFrontEnd(engine, "refactor-see-move-ordering");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
