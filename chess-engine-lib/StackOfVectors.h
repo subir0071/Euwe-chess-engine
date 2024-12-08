@@ -350,6 +350,14 @@ class StackVector {
         parent_.reserve(size + startIdx_);
     }
 
+    void resize(int size) {
+#ifndef NDEBUG
+        MY_ASSERT(!isLocked_);
+#endif
+        parent_.items_.resize(size + startIdx_);
+        endIdx_ = startIdx_ + size;
+    }
+
     int size() const { return endIdx_ - startIdx_; }
     bool empty() const { return size() == 0; }
 

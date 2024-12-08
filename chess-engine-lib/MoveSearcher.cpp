@@ -564,10 +564,10 @@ EvalT MoveSearcher::Impl::search(
     }
 
     auto orderedMoves =
-            moveOrderer_.orderMoves(std::move(moves), hashMove, gameState, lastMove, ply);
+            moveOrderer_.orderMoves(std::move(moves), hashMove, gameState, lastMove, ply, stack);
 
     while (orderedMoves.hasMoreMoves()) {
-        const auto [move, moveIdx] = orderedMoves.getNextBestMove();
+        const auto [move, moveIdx] = orderedMoves.getNextBestMove(gameState);
 
         // Futility pruning
         static constexpr EvalT futilityMarginPerDepth = 140;
@@ -831,10 +831,11 @@ EvalT MoveSearcher::Impl::quiesce(
         return bestScore;
     }
 
-    auto orderedMoves = moveOrderer_.orderMovesQuiescence(std::move(moves), hashMove, gameState);
+    auto orderedMoves =
+            moveOrderer_.orderMovesQuiescence(std::move(moves), hashMove, gameState, stack);
 
     while (orderedMoves.hasMoreMoves()) {
-        const auto [move, _] = orderedMoves.getNextBestMove();
+        const Move move = orderedMoves.getNextBestMoveQuiescence();
 
         if (!isInCheck) {
             // Delta pruning

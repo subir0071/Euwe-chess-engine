@@ -15,17 +15,25 @@ class GameState;
 
 class OrderedMoves {
   public:
-    OrderedMoves(StackVector<Move>&& moves, StackVector<MoveEvalT>&& moveScores, int firstMoveIdx);
+    OrderedMoves(
+            StackVector<Move>&& moves,
+            StackVector<MoveEvalT>&& moveScores,
+            int firstMoveIdx,
+            StackOfVectors<Move>& moveStack);
 
-    [[nodiscard]] std::pair<Move, int> getNextBestMove();
+    [[nodiscard]] std::pair<Move, int> getNextBestMove(const GameState& gameState);
+    [[nodiscard]] Move getNextBestMoveQuiescence();
 
     [[nodiscard]] bool hasMoreMoves() const;
+    [[nodiscard]] bool lastMoveWasLosing() const;
 
   private:
     StackVector<Move> moves_;
+    StackVector<Move> losingMoves_;
     StackVector<MoveEvalT> moveScores_;
 
     int currentMoveIdx_;
+    int numLosingMoves_;
 };
 
 class MoveOrderer {
@@ -40,12 +48,14 @@ class MoveOrderer {
             const std::optional<Move>& moveToIgnore,
             const GameState& gameState,
             const Move& lastMove,
-            int ply) const;
+            int ply,
+            StackOfVectors<Move>& moveStack) const;
 
     [[nodiscard]] OrderedMoves orderMovesQuiescence(
             StackVector<Move>&& moves,
             const std::optional<Move>& moveToIgnore,
-            const GameState& gameState) const;
+            const GameState& gameState,
+            StackOfVectors<Move>& moveStack) const;
 
     void newGame();
     void prepareForNewSearch(const GameState& gameState);
