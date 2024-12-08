@@ -85,8 +85,8 @@ std::pair<EvalT, GameState> quiesce(
 
     auto orderedMoves = moveOrderer.orderMovesQuiescence(std::move(moves), std::nullopt, gameState);
 
-    while (orderedMoves.hasMoreMoves()) {
-        const Move move = orderedMoves.getNextBestMoveQuiescence();
+    while (const auto maybeMove = orderedMoves.getNextBestMoveQuiescence()) {
+        const Move move = *maybeMove;
 
         const auto unmakeInfo = gameState.makeMove(move);
 

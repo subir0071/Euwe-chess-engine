@@ -569,8 +569,8 @@ EvalT MoveSearcher::Impl::search(
     auto orderedMoves =
             moveOrderer_.orderMoves(std::move(moves), hashMove, gameState, lastMove, ply);
 
-    while (orderedMoves.hasMoreMoves()) {
-        const auto move = orderedMoves.getNextBestMove(gameState);
+    while (const auto maybeMove = orderedMoves.getNextBestMove(gameState)) {
+        const Move move = *maybeMove;
 
         // Futility pruning
         static constexpr EvalT futilityMarginPerDepth = 140;
@@ -810,6 +810,8 @@ EvalT MoveSearcher::Impl::quiesce(
             }
 
             alpha = max(alpha, score);
+        } else {
+            hashMove = std::nullopt;
         }
     }
 
@@ -837,8 +839,8 @@ EvalT MoveSearcher::Impl::quiesce(
 
     auto orderedMoves = moveOrderer_.orderMovesQuiescence(std::move(moves), hashMove, gameState);
 
-    while (orderedMoves.hasMoreMoves()) {
-        const Move move = orderedMoves.getNextBestMoveQuiescence();
+    while (const auto maybeMove = orderedMoves.getNextBestMoveQuiescence()) {
+        const Move move = *maybeMove;
 
         if (!isInCheck) {
             // Delta pruning

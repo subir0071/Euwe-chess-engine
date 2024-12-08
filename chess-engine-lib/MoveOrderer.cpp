@@ -55,95 +55,194 @@ scoreQueenPromotion(const Move& move, const GameState& gameState) {
 
 FORCE_INLINE OrderedMoves::OrderedMoves(
         StackVector<Move>&& moves, StackVector<MoveEvalT>&& moveScores, const int firstMoveIdx)
-    : moves_(std::move(moves)),
+    : state_(State::Init),
+      moves_(std::move(moves)),
       moveScores_(std::move(moveScores)),
       currentMoveIdx_(firstMoveIdx),
-      firstLosingMoveIdx_(moves_.size()) {}
+      firstLosingCaptureIdx_(moves_.size()),
+      firstQuietIdx_(moves_.size()) {}
 
-FORCE_INLINE Move OrderedMoves::getNextBestMove(const GameState& gameState) {
-    while (currentMoveIdx_ < firstLosingMoveIdx_) {
-        // Select best move based on pre-calculated scores using a simple linear search.
-        // Then do a 'destructive swap' with the first move in the list and return the best move.
-        // This basically ends up doing a selection sort when called repeatedly, except that we don't
-        // actually write the best moves to the front of the list.
+FORCE_INLINE std::optional<Move> OrderedMoves::getNextBestMove(const GameState& gameState) {
+    MY_ASSERT(
+            0 <= firstLosingCaptureIdx_ && firstLosingCaptureIdx_ <= firstQuietIdx_
+            && firstQuietIdx_ <= moves_.size());
+    MY_ASSERT(0 <= currentMoveIdx_ && currentMoveIdx_ <= moves_.size());
 
-        int bestMoveIdx         = -1;
-        MoveEvalT bestMoveScore = std::numeric_limits<MoveEvalT>::lowest();
+    switch (state_) {
+        case State::Init: {
+            partitionTacticalMoves();
 
-        for (int moveIdx = currentMoveIdx_; moveIdx < firstLosingMoveIdx_; ++moveIdx) {
-            if (moveScores_[moveIdx] > bestMoveScore) {
-                bestMoveScore = moveScores_[moveIdx];
-                bestMoveIdx   = moveIdx;
-            }
+            state_ = State::GoodTactical;
+            [[fallthrough]];
         }
 
-        const Move bestMove = moves_[bestMoveIdx];
+        case State::GoodTactical: {
+            MY_ASSERT(currentMoveIdx_ <= firstLosingCaptureIdx_);
 
-        if (isCapture(bestMove.flags)) {
-            const bool isNonLosing = staticExchangeEvaluationNonLosing(gameState, bestMove);
+            while (currentMoveIdx_ < firstLosingCaptureIdx_) {
+                const int bestMoveIdx =
+                        findHighestScoringMove(currentMoveIdx_, firstLosingCaptureIdx_);
 
-            if (!isNonLosing) {
-                // This move is losing based on SEE. Move it to the losing moves list, and find the next
-                // best move.
-                --firstLosingMoveIdx_;
-                std::swap(moves_[bestMoveIdx], moves_[firstLosingMoveIdx_]);
-                std::swap(moveScores_[bestMoveIdx], moveScores_[firstLosingMoveIdx_]);
-                continue;
+                const Move bestMove = moves_[bestMoveIdx];
+
+                if (isCapture(bestMove.flags)) {
+                    const bool isNonLosing = staticExchangeEvaluationNonLosing(gameState, bestMove);
+
+                    if (!isNonLosing) {
+                        // This move is losing based on SEE. Move it to the losing moves list, and find the next
+                        // best move.
+                        --firstLosingCaptureIdx_;
+                        std::swap(moves_[bestMoveIdx], moves_[firstLosingCaptureIdx_]);
+                        std::swap(moveScores_[bestMoveIdx], moveScores_[firstLosingCaptureIdx_]);
+                        continue;
+                    }
+                }
+
+                std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
+                std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
+                ++currentMoveIdx_;
+
+                return bestMove;
             }
+
+            state_          = State::Quiets;
+            currentMoveIdx_ = firstQuietIdx_;
+            [[fallthrough]];
         }
 
-        std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
-        std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
-        ++currentMoveIdx_;
+        case State::Quiets: {
+            MY_ASSERT(firstQuietIdx_ <= currentMoveIdx_ && currentMoveIdx_ <= moves_.size());
 
-        return bestMove;
+            if (currentMoveIdx_ < moves_.size()) {
+                const int bestMoveIdx = findHighestScoringMove(currentMoveIdx_, moves_.size());
+
+                const Move bestMove = moves_[bestMoveIdx];
+
+                std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
+                std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
+                ++currentMoveIdx_;
+
+                return bestMove;
+            }
+
+            state_          = State::LosingCaptures;
+            currentMoveIdx_ = firstLosingCaptureIdx_;
+            [[fallthrough]];
+        }
+
+        case State::LosingCaptures: {
+            MY_ASSERT(
+                    firstLosingCaptureIdx_ <= currentMoveIdx_ && currentMoveIdx_ <= firstQuietIdx_);
+
+            if (currentMoveIdx_ < firstQuietIdx_) {
+                // We've exhausted all the non-losing moves. Return the best losing move.
+                // Here, 'best' is based on the original move scoring.
+                // Losing moves are inserted in reverse order of score, so we need to start at the back.
+                const int losingMoveIdx     = currentMoveIdx_ - firstLosingCaptureIdx_;
+                const int lastLosingMoveIdx = firstQuietIdx_ - 1;
+                const int listIdx           = lastLosingMoveIdx - losingMoveIdx;
+
+                ++currentMoveIdx_;
+
+                MY_ASSERT(listIdx >= firstLosingCaptureIdx_ && listIdx < firstQuietIdx_);
+                return moves_[listIdx];
+            }
+
+            state_ = State::Done;
+            [[fallthrough]];
+        }
+
+        case State::Done: {
+            MY_ASSERT(currentMoveIdx_ == firstQuietIdx_);
+
+            return std::nullopt;
+        }
     }
 
-    // We've exhausted all the non-losing moves. Return the best losing move.
-    // Here, 'best' is based on the original move scoring.
-    // Losing moves are inserted in reverse order of score, so we need to start at the back.
-    const int losingMoveIdx     = currentMoveIdx_ - firstLosingMoveIdx_;
-    const int lastLosingMoveIdx = moves_.size() - 1;
-    const int listIdx           = lastLosingMoveIdx - losingMoveIdx;
-
-    ++currentMoveIdx_;
-
-    MY_ASSERT(listIdx >= firstLosingMoveIdx_ && listIdx < moves_.size());
-    return moves_[listIdx];
+    UNREACHABLE;
 }
 
-FORCE_INLINE Move OrderedMoves::getNextBestMoveQuiescence() {
+FORCE_INLINE std::optional<Move> OrderedMoves::getNextBestMoveQuiescence() {
+    if (currentMoveIdx_ == moves_.size()) {
+        return std::nullopt;
+    }
+    MY_ASSERT(0 <= currentMoveIdx_ && currentMoveIdx_ < moves_.size());
+
+    const int bestMoveIdx = findHighestScoringMove(currentMoveIdx_, moves_.size());
+
+    const Move bestMove = moves_[bestMoveIdx];
+
+    std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
+    std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
+    ++currentMoveIdx_;
+
+    return bestMove;
+}
+
+FORCE_INLINE bool OrderedMoves::lastMoveWasLosing() const {
+    return state_ == State::LosingCaptures;
+}
+
+FORCE_INLINE int OrderedMoves::findHighestScoringMove(int startIdx, int endIdx) const {
     // Select best move based on pre-calculated scores using a simple linear search.
-    // Then do a 'destructive swap' with the first move in the list and return the best move.
-    // This basically ends up doing a selection sort when called repeatedly, except that we don't
-    // actually write the best moves to the front of the list.
+    // If the best move is then swapped to the front, repeated calls of this function end up doing
+    // a selection sort.
 
     int bestMoveIdx         = -1;
     MoveEvalT bestMoveScore = std::numeric_limits<MoveEvalT>::lowest();
 
-    for (int moveIdx = currentMoveIdx_; moveIdx < moveScores_.size(); ++moveIdx) {
+    for (int moveIdx = startIdx; moveIdx < endIdx; ++moveIdx) {
         if (moveScores_[moveIdx] > bestMoveScore) {
             bestMoveScore = moveScores_[moveIdx];
             bestMoveIdx   = moveIdx;
         }
     }
 
-    const Move bestMove = moves_[bestMoveIdx];
+    MY_ASSERT(bestMoveIdx != -1);
 
-    // 'Destructive swap'
-    moves_[bestMoveIdx]      = moves_[currentMoveIdx_];
-    moveScores_[bestMoveIdx] = moveScores_[currentMoveIdx_];
-    ++currentMoveIdx_;
-
-    return bestMove;
+    return bestMoveIdx;
 }
 
-FORCE_INLINE bool OrderedMoves::hasMoreMoves() const {
-    return currentMoveIdx_ < moves_.size();
-}
+FORCE_INLINE void OrderedMoves::partitionTacticalMoves() {
+    MY_ASSERT(state_ == State::Init);
 
-FORCE_INLINE bool OrderedMoves::lastMoveWasLosing() const {
-    return currentMoveIdx_ - 1 >= firstLosingMoveIdx_;
+    const auto isTactical = [](const Move& move) {
+        return isCapture(move.flags) || getPromotionPiece(move.flags) == Piece::Queen;
+    };
+
+    // Partition moves into tactical and quiet moves using Hoare's partitioning scheme.
+    int i = currentMoveIdx_ - 1;
+    int j = moves_.size();
+
+    while (true) {
+        do {
+            ++i;
+        } while (i < j && isTactical(moves_[i]));
+
+        do {
+            --j;
+        } while (j >= i && !isTactical(moves_[j]));
+
+        if (i >= j) {
+            firstQuietIdx_ = i;
+            break;
+        }
+
+        std::swap(moves_[i], moves_[j]);
+        std::swap(moveScores_[i], moveScores_[j]);
+    }
+
+    MY_ASSERT(firstQuietIdx_ <= moves_.size());
+#ifndef NDEBUG
+    for (int i = currentMoveIdx_; i < firstQuietIdx_; ++i) {
+        MY_ASSERT(isTactical(moves_[i]));
+    }
+    for (int i = firstQuietIdx_; i < moves_.size(); ++i) {
+        MY_ASSERT(!isTactical(moves_[i]));
+    }
+#endif
+
+    firstLosingCaptureIdx_ = firstQuietIdx_;
 }
 
 MoveOrderer::MoveOrderer(const Evaluator& evaluator) : evaluator_(evaluator) {
@@ -339,7 +438,7 @@ FORCE_INLINE void MoveOrderer::ignoreMove(
     const auto hashMoveIt = std::find(moves.begin(), moves.end(), moveToIgnore);
     MY_ASSERT_DEBUG(hashMoveIt != moves.end());
     if (hashMoveIt != moves.end()) {
-        *hashMoveIt = moves.front();
+        std::swap(*hashMoveIt, moves.front());
         ++moveIdx;
     }
 }

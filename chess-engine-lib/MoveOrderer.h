@@ -17,18 +17,31 @@ class OrderedMoves {
   public:
     OrderedMoves(StackVector<Move>&& moves, StackVector<MoveEvalT>&& moveScores, int firstMoveIdx);
 
-    [[nodiscard]] Move getNextBestMove(const GameState& gameState);
-    [[nodiscard]] Move getNextBestMoveQuiescence();
+    [[nodiscard]] std::optional<Move> getNextBestMove(const GameState& gameState);
+    [[nodiscard]] std::optional<Move> getNextBestMoveQuiescence();
 
-    [[nodiscard]] bool hasMoreMoves() const;
     [[nodiscard]] bool lastMoveWasLosing() const;
 
   private:
+    enum class State {
+        Init,
+        GoodTactical,
+        Quiets,
+        LosingCaptures,
+        Done,
+    };
+
+    void partitionTacticalMoves();
+    [[nodiscard]] int findHighestScoringMove(int startIdx, int endIdx) const;
+
+    State state_;
+
     StackVector<Move> moves_;
     StackVector<MoveEvalT> moveScores_;
 
     int currentMoveIdx_;
-    int firstLosingMoveIdx_;
+    int firstLosingCaptureIdx_;
+    int firstQuietIdx_;
 };
 
 class MoveOrderer {
