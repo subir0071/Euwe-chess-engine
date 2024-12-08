@@ -2,7 +2,7 @@
 
 #include "chess-engine-lib/Eval.h"
 #include "chess-engine-lib/Math.h"
-#include "chess-engine-lib/MoveOrder.h"
+#include "chess-engine-lib/MoveOrderer.h"
 
 #include <algorithm>
 #include <execution>
@@ -43,7 +43,7 @@ std::pair<EvalT, GameState> quiesce(
         EvalT alpha,
         EvalT beta,
         StackOfVectors<Move>& stack,
-        StackOfVectors<MoveEvalT>& moveScoreStack,
+        MoveOrderer& moveOrderer,
         const Evaluator& evaluator) {
     constexpr EvalT kDeltaPruningThreshold = 200;
 
@@ -83,14 +83,14 @@ std::pair<EvalT, GameState> quiesce(
         return {bestScore, bestState};
     }
 
-    auto moveScores = scoreMovesQuiesce(evaluator, moves, 0, gameState, moveScoreStack);
+    auto orderedMoves = moveOrderer.orderMovesQuiescence(std::move(moves), std::nullopt, gameState);
 
-    for (int moveIdx = 0; moveIdx < moves.size(); ++moveIdx) {
-        const Move move = selectBestMove(moves, moveScores, moveIdx);
+    while (orderedMoves.hasMoreMoves()) {
+        const auto [move, _] = orderedMoves.getNextBestMove();
 
         const auto unmakeInfo = gameState.makeMove(move);
 
-        auto [score, state] = quiesce(gameState, -beta, -alpha, stack, moveScoreStack, evaluator);
+        auto [score, state] = quiesce(gameState, -beta, -alpha, stack, moveOrderer, evaluator);
         score               = -score;
 
         gameState.unmakeMove(move, unmakeInfo);
@@ -136,14 +136,9 @@ void quiescePositions(std::vector<ScoredPosition>& scoredPositions) {
                 const EvalT beta           = baseEval + deltaThreshold + 1;
 
                 StackOfVectors<Move> moveStack;
-                StackOfVectors<MoveEvalT> moveScoreStack;
-                auto [score, state] =
-                        quiesce(scoredPosition.gameState,
-                                alpha,
-                                beta,
-                                moveStack,
-                                moveScoreStack,
-                                evaluator);
+                MoveOrderer moveOrderer(evaluator);
+                auto [score, state] = quiesce(
+                        scoredPosition.gameState, alpha, beta, moveStack, moveOrderer, evaluator);
 
                 const EvalT evalDelta = std::abs(baseEval - score);
                 if (evalDelta >= deltaThreshold || std::abs(score) >= evalThreshold) {

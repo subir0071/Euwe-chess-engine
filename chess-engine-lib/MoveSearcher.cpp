@@ -2,7 +2,7 @@
 
 #include "Eval.h"
 #include "Math.h"
-#include "MoveOrder.h"
+#include "MoveOrderer.h"
 #include "SEE.h"
 #include "TTable.h"
 
@@ -53,16 +53,6 @@ class MoveSearcher::Impl {
 
     // == Helper functions ==
 
-    [[nodiscard]] std::array<Move, 2>& getKillerMoves(int ply);
-    void storeKillerMove(const Move& move, int ply);
-
-    [[nodiscard]] Move getCounterMove(const Move& move, Side side);
-    void storeCounterMove(const Move& lastMove, const Move& counter, Side side);
-
-    [[nodiscard]] static int getHistoryWeight(int depth);
-    void updateHistoryForCutoff(const Move& move, int depth, Side side);
-    void updateHistoryForUse(const Move& move, int depth, Side side);
-
     // Write updated information to the ttable.
     void updateTTable(
             EvalT bestScore,
@@ -76,10 +66,6 @@ class MoveSearcher::Impl {
     // Extract the principal variation from the transposition table.
     [[nodiscard]] StackVector<Move> extractPv(
             GameState gameState, StackOfVectors<Move>& stack, int depth);
-
-    void shiftKillerMoves(int halfMoveClock);
-    void initializeHistoryFromPieceSquare();
-    void scaleDownHistory();
 
     [[nodiscard]] bool shouldStopSearch() const;
 
@@ -140,20 +126,9 @@ class MoveSearcher::Impl {
 
     SearchTTable tTable_ = {};
 
-    StackOfVectors<MoveEvalT> moveScoreStack_ = {};
+    MoveOrderer moveOrderer_;
 
     SearchStatistics searchStatistics_ = {};
-
-    int moveClockForKillerMoves_                            = 0;
-    std::array<std::array<Move, 2>, kMaxDepth> killerMoves_ = {};
-
-    std::array<std::array<std::array<Move, kSquares>, kNumPieceTypes>, kNumSides> counterMoves_ =
-            {};
-
-    std::array<std::array<std::array<unsigned, kSquares>, kNumPieceTypes>, kNumSides>
-            historyCutOff_ = {};
-    std::array<std::array<std::array<unsigned, kSquares>, kNumPieceTypes>, kNumSides> historyUsed_ =
-            {};
 
     const IFrontEnd* frontEnd_ = nullptr;
 
@@ -293,9 +268,7 @@ FORCE_INLINE Move getTTableMove(const SearchTTPayload payload, const GameState& 
 }  // namespace
 
 MoveSearcher::Impl::Impl(const TimeManager& timeManager, const Evaluator& evaluator)
-    : timeManager_(timeManager), evaluator_(evaluator) {
-    moveScoreStack_.reserve(1'000);
-    initializeHistoryFromPieceSquare();
+    : moveOrderer_(evaluator), timeManager_(timeManager), evaluator_(evaluator) {
     setTTableSize(getDefaultTTableSizeInMb());
 }
 
@@ -309,88 +282,12 @@ void MoveSearcher::Impl::newGame() {
     stopSearch_     = false;
     wasInterrupted_ = false;
 
+    moveOrderer_.newGame();
+
     tTable_.clear();
     tTableTick_ = 0;
 
     resetSearchStatistics();
-
-    moveClockForKillerMoves_ = 0;
-    killerMoves_             = {};
-    counterMoves_            = {};
-
-    initializeHistoryFromPieceSquare();
-}
-
-FORCE_INLINE std::array<Move, 2>& MoveSearcher::Impl::getKillerMoves(const int ply) {
-    MY_ASSERT(ply < kMaxDepth);
-    return killerMoves_[ply];
-}
-
-FORCE_INLINE void MoveSearcher::Impl::storeKillerMove(const Move& move, const int ply) {
-    if (isCapture(move.flags) || isPromotion(move.flags)) {
-        // Only store 'quiet' moves as killer moves.
-        return;
-    }
-
-    auto& plyKillerMoves = getKillerMoves(ply);
-
-    if (move == plyKillerMoves[0]) {
-        // Don't store the same move twice.
-        return;
-    }
-
-    // Shift killer moves down and store the new move at the front.
-    plyKillerMoves[1] = plyKillerMoves[0];
-    plyKillerMoves[0] = move;
-}
-
-FORCE_INLINE Move MoveSearcher::Impl::getCounterMove(const Move& move, const Side side) {
-    if (move.pieceToMove == Piece::Invalid) {
-        return {};
-    }
-    return counterMoves_[(int)side][(int)move.pieceToMove][(int)move.to];
-}
-
-FORCE_INLINE void MoveSearcher::Impl::storeCounterMove(
-        const Move& lastMove, const Move& counter, const Side side) {
-    if (isCapture(counter.flags) || isPromotion(counter.flags)) {
-        // Only store 'quiet' moves as counter moves.
-        return;
-    }
-    if (lastMove.pieceToMove == Piece::Invalid) {
-        return;
-    }
-    counterMoves_[(int)side][(int)lastMove.pieceToMove][(int)lastMove.to] = counter;
-}
-
-FORCE_INLINE int MoveSearcher::Impl::getHistoryWeight(const int depth) {
-    return depth * depth;
-}
-
-FORCE_INLINE void MoveSearcher::Impl::updateHistoryForCutoff(
-        const Move& move, const int depth, const Side side) {
-    if (isCapture(move.flags) || isPromotion(move.flags)) {
-        // Only update history for 'quiet' moves.
-        return;
-    }
-
-    const int square = (int)move.to;
-    const int piece  = (int)move.pieceToMove;
-
-    historyCutOff_[(int)side][piece][square] += getHistoryWeight(depth);
-}
-
-FORCE_INLINE void MoveSearcher::Impl::updateHistoryForUse(
-        const Move& move, const int depth, const Side side) {
-    if (isCapture(move.flags) || isPromotion(move.flags)) {
-        // Only update history for 'quiet' moves.
-        return;
-    }
-
-    const int square = (int)move.to;
-    const int piece  = (int)move.pieceToMove;
-
-    historyUsed_[(int)side][piece][square] += getHistoryWeight(depth);
 }
 
 FORCE_INLINE void MoveSearcher::Impl::updateTTable(
@@ -475,57 +372,6 @@ StackVector<Move> MoveSearcher::Impl::extractPv(
 
     pv.lock();
     return pv;
-}
-
-void MoveSearcher::Impl::shiftKillerMoves(const int halfMoveClock) {
-    const int shiftAmount = halfMoveClock - moveClockForKillerMoves_;
-
-    for (int ply = 0; ply < kMaxDepth - shiftAmount; ++ply) {
-        killerMoves_[ply] = killerMoves_[(std::size_t)ply + shiftAmount];
-    }
-
-    moveClockForKillerMoves_ = halfMoveClock;
-}
-
-void MoveSearcher::Impl::initializeHistoryFromPieceSquare() {
-    static constexpr int kNumScaleBits        = 7;   // 128
-    static constexpr int kPieceSquareBiasBits = 16;  // ~65k
-
-    for (int side = 0; side < kNumSides; ++side) {
-        for (int piece = 0; piece < kNumPieceTypes; ++piece) {
-            for (int square = 0; square < kSquares; ++square) {
-                int pieceSquareValue = evaluator_.getPieceSquareValue(
-                        (Piece)piece, (BoardPosition)square, (Side)side);
-                // Get rid of negative values
-                pieceSquareValue = clamp(pieceSquareValue + 50, 0, 1000);
-
-                historyCutOff_[side][piece][square] = pieceSquareValue
-                                                   << (kPieceSquareBiasBits - kNumScaleBits);
-
-                historyUsed_[side][piece][square] = 1 << kPieceSquareBiasBits;
-            }
-        }
-    }
-}
-
-void MoveSearcher::Impl::scaleDownHistory() {
-    static constexpr int kScaleDownBits = 4;   // 16
-    static constexpr int kTargetBits    = 10;  // 1024
-    static constexpr int kCountlTarget  = 32 - kTargetBits;
-
-    for (int side = 0; side < kNumSides; ++side) {
-        for (int piece = 0; piece < kNumPieceTypes; ++piece) {
-            for (int square = 0; square < kSquares; ++square) {
-                unsigned& historyUsed       = historyUsed_[side][piece][square];
-                const int historyCountlZero = std::countl_zero(historyUsed);
-
-                const int shiftAmount = clamp(historyCountlZero - kCountlTarget, 0, kScaleDownBits);
-
-                historyUsed >>= shiftAmount;
-                historyCutOff_[side][piece][square] >>= shiftAmount;
-            }
-        }
-    }
 }
 
 bool MoveSearcher::Impl::shouldStopSearch() const {
@@ -717,29 +563,11 @@ EvalT MoveSearcher::Impl::search(
         return evaluateNoLegalMoves(gameState);
     }
 
-    int moveIdx = 0;
-    if (hashMove) {
-        const auto hashMoveIt = std::find(moves.begin(), moves.end(), *hashMove);
-        MY_ASSERT_DEBUG(hashMoveIt != moves.end());
-        if (hashMoveIt != moves.end()) {
-            *hashMoveIt = moves.front();
-            ++moveIdx;
-        }
-    }
+    auto orderedMoves =
+            moveOrderer_.orderMoves(std::move(moves), hashMove, gameState, lastMove, ply);
 
-    auto moveScores = scoreMoves(
-            evaluator_,
-            moves,
-            moveIdx,
-            gameState,
-            getKillerMoves(ply),
-            getCounterMove(lastMove, gameState.getSideToMove()),
-            historyCutOff_[(int)gameState.getSideToMove()],
-            historyUsed_[(int)gameState.getSideToMove()],
-            moveScoreStack_);
-
-    for (; moveIdx < moves.size(); ++moveIdx) {
-        const Move move = selectBestMove(moves, moveScores, moveIdx);
+    while (orderedMoves.hasMoreMoves()) {
+        const auto [move, moveIdx] = orderedMoves.getNextBestMove();
 
         // Futility pruning
         static constexpr EvalT futilityMarginPerDepth = 140;
@@ -1003,19 +831,10 @@ EvalT MoveSearcher::Impl::quiesce(
         return bestScore;
     }
 
-    int moveIdx = 0;
-    if (hashMove) {
-        const auto hashMoveIt = std::find(moves.begin(), moves.end(), *hashMove);
-        if (hashMoveIt != moves.end()) {
-            *hashMoveIt = moves.front();
-            ++moveIdx;
-        }
-    }
+    auto orderedMoves = moveOrderer_.orderMovesQuiescence(std::move(moves), hashMove, gameState);
 
-    auto moveScores = scoreMovesQuiesce(evaluator_, moves, moveIdx, gameState, moveScoreStack_);
-
-    for (; moveIdx < moves.size(); ++moveIdx) {
-        const Move move = selectBestMove(moves, moveScores, moveIdx);
+    while (orderedMoves.hasMoreMoves()) {
+        const auto [move, _] = orderedMoves.getNextBestMove();
 
         if (!isInCheck) {
             // Delta pruning
@@ -1167,15 +986,13 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
 
     updateMateDistance(score);
 
-    updateHistoryForUse(move, depth, gameState.getSideToMove());
+    moveOrderer_.reportMoveSearched(move, depth, gameState.getSideToMove());
     if (score > bestScore) {
         bestScore = score;
         bestMove  = move;
 
         if (bestScore >= beta) {
-            storeKillerMove(move, ply);
-            storeCounterMove(lastMove, move, gameState.getSideToMove());
-            updateHistoryForCutoff(move, depth, gameState.getSideToMove());
+            moveOrderer_.reportCutoff(move, lastMove, ply, depth, gameState.getSideToMove());
 
             // Fail high; score is a lower bound.
             return SearchMoveOutcome::Cutoff;
@@ -1334,8 +1151,7 @@ void MoveSearcher::Impl::prepareForNewSearch(const GameState& gameState) {
     stopSearch_     = false;
     wasInterrupted_ = false;
 
-    shiftKillerMoves(gameState.getHalfMoveClock());
-    scaleDownHistory();
+    moveOrderer_.prepareForNewSearch(gameState);
 
     ++tTableTick_;
 }
