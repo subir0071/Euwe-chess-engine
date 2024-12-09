@@ -9,10 +9,12 @@ namespace {
 
 // Killer and counter bonuses can potentially both apply.
 // Make sure that the combined bonus is less than the capture and promotion bonuses.
-constexpr int kCaptureBonus     = 3'000;
-constexpr int kPromotionBonus   = 3'000;
-constexpr int kKillerMoveBonus  = 1'000;
-constexpr int kCounterMoveBonus = 500;
+constexpr int kCaptureBonus     = 30'000;
+constexpr int kPromotionBonus   = 30'000;
+constexpr int kKillerMoveBonus  = 10'000;
+constexpr int kCounterMoveBonus = 5'000;
+
+constexpr int kMaxHistory = 4096;
 
 [[nodiscard]] FORCE_INLINE MoveEvalT
 scoreCapture(const Evaluator& evaluator, const Move& move, const GameState& gameState) {
@@ -302,7 +304,6 @@ void MoveScorer::newGame() {
 
 void MoveScorer::prepareForNewSearch(const GameState& gameState) {
     shiftKillerMoves(gameState.getHalfMoveClock());
-    scaleDownHistory();
 }
 
 FORCE_INLINE MoveScorer::KillerMoves& MoveScorer::getKillerMoves(const int ply) {
@@ -358,28 +359,33 @@ FORCE_INLINE int MoveScorer::getHistoryWeight(const int depth) {
 
 FORCE_INLINE void MoveScorer::updateHistoryForCutoff(
         const Move& move, const int depth, const Side side) {
-    if (isCapture(move.flags) || isPromotion(move.flags)) {
-        // Only update history for 'quiet' moves.
-        return;
-    }
-
-    const int square = (int)move.to;
-    const int piece  = (int)move.pieceToMove;
-
-    historyCutOff_[(int)side][piece][square] += getHistoryWeight(depth);
+    updateHistory(move, side, getHistoryWeight(depth));
 }
 
 FORCE_INLINE void MoveScorer::updateHistoryForUse(
         const Move& move, const int depth, const Side side) {
+    updateHistory(move, side, -getHistoryWeight(depth));
+}
+
+FORCE_INLINE void MoveScorer::updateHistory(
+        const Move& move, const Side side, const HistoryValueT update) {
     if (isCapture(move.flags) || isPromotion(move.flags)) {
         // Only update history for 'quiet' moves.
         return;
     }
 
+    // History with 'gravity'.
+
+    const HistoryValueT clampedUpdate = clamp(update, -kMaxHistory, kMaxHistory);
+
     const int square = (int)move.to;
     const int piece  = (int)move.pieceToMove;
 
-    historyUsed_[(int)side][piece][square] += getHistoryWeight(depth);
+    HistoryValueT& value = history_[(int)side][piece][square];
+
+    value += clampedUpdate - value * constexprAbs(clampedUpdate) / kMaxHistory;
+
+    MY_ASSERT(constexprAbs(value) <= kMaxHistory);
 }
 
 void MoveScorer::shiftKillerMoves(const int halfMoveClock) {
@@ -393,41 +399,14 @@ void MoveScorer::shiftKillerMoves(const int halfMoveClock) {
 }
 
 void MoveScorer::initializeHistoryFromPieceSquare() {
-    static constexpr int kNumScaleBits        = 7;   // 128
-    static constexpr int kPieceSquareBiasBits = 16;  // ~65k
-
     for (int side = 0; side < kNumSides; ++side) {
         for (int piece = 0; piece < kNumPieceTypes; ++piece) {
             for (int square = 0; square < kSquares; ++square) {
-                int pieceSquareValue = evaluator_.getPieceSquareValue(
+                const int pieceSquareValue = evaluator_.getPieceSquareValue(
                         (Piece)piece, (BoardPosition)square, (Side)side);
-                // Get rid of negative values
-                pieceSquareValue = clamp(pieceSquareValue + 50, 0, 1000);
+                const int historyValue = clamp(pieceSquareValue, -kMaxHistory, kMaxHistory);
 
-                historyCutOff_[side][piece][square] = pieceSquareValue
-                                                   << (kPieceSquareBiasBits - kNumScaleBits);
-
-                historyUsed_[side][piece][square] = 1 << kPieceSquareBiasBits;
-            }
-        }
-    }
-}
-
-void MoveScorer::scaleDownHistory() {
-    static constexpr int kScaleDownBits = 4;   // 16
-    static constexpr int kTargetBits    = 10;  // 1024
-    static constexpr int kCountlTarget  = 32 - kTargetBits;
-
-    for (int side = 0; side < kNumSides; ++side) {
-        for (int piece = 0; piece < kNumPieceTypes; ++piece) {
-            for (int square = 0; square < kSquares; ++square) {
-                unsigned& historyUsed       = historyUsed_[side][piece][square];
-                const int historyCountlZero = std::countl_zero(historyUsed);
-
-                const int shiftAmount = clamp(historyCountlZero - kCountlTarget, 0, kScaleDownBits);
-
-                historyUsed >>= shiftAmount;
-                historyCutOff_[side][piece][square] >>= shiftAmount;
+                history_[side][piece][square] = historyValue;
             }
         }
     }
@@ -451,8 +430,7 @@ StackVector<MoveEvalT> MoveScorer::scoreMoves(
         const int ply) const {
     StackVector<MoveEvalT> scores = moveScoreStack_.makeStackVector();
 
-    const auto& historyCutOffs = historyCutOff_[(int)gameState.getSideToMove()];
-    const auto& historyUsed    = historyUsed_[(int)gameState.getSideToMove()];
+    const auto& historyForSide = history_[(int)gameState.getSideToMove()];
     const auto& killerMoves    = getKillerMoves(ply);
     const Move counterMove     = getCounterMove(lastMove, gameState.getSideToMove());
 
@@ -465,10 +443,7 @@ StackVector<MoveEvalT> MoveScorer::scoreMoves(
 
         MoveEvalT moveScore = 0;
 
-        const int cutOffScore = historyCutOffs[(int)move.pieceToMove][(int)move.to];
-        const int usedScore   = historyUsed[(int)move.pieceToMove][(int)move.to];
-
-        moveScore += (cutOffScore << 5) / usedScore;
+        moveScore += historyForSide[(int)move.pieceToMove][(int)move.to];
 
         if (isCapture(move.flags)) {
             moveScore += scoreCapture(evaluator_, move, gameState);

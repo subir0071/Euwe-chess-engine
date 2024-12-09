@@ -77,7 +77,7 @@ class MoveScorer {
     using CounterMovePerPiece = std::array<MovePerSquare, kNumPieceTypes>;
     using CounterMovePerSide  = std::array<CounterMovePerPiece, kNumSides>;
 
-    using HistoryValueT    = unsigned;
+    using HistoryValueT    = int;
     using HistoryPerSquare = std::array<HistoryValueT, kSquares>;
     using HistoryPerPiece  = std::array<HistoryPerSquare, kNumPieceTypes>;
     using HistoryPerSide   = std::array<HistoryPerPiece, kNumSides>;
@@ -92,10 +92,10 @@ class MoveScorer {
     [[nodiscard]] static int getHistoryWeight(int depth);
     void updateHistoryForCutoff(const Move& move, int depth, Side side);
     void updateHistoryForUse(const Move& move, int depth, Side side);
+    void updateHistory(const Move& move, Side side, HistoryValueT update);
 
     void shiftKillerMoves(int halfMoveClock);
     void initializeHistoryFromPieceSquare();
-    void scaleDownHistory();
 
     void ignoreMove(const Move& moveToIgnore, StackVector<Move>& moves, int& moveIdx) const;
 
@@ -118,8 +118,7 @@ class MoveScorer {
 
     CounterMovePerSide counterMoves_ = {};
 
-    HistoryPerSide historyCutOff_ = {};
-    HistoryPerSide historyUsed_   = {};
+    HistoryPerSide history_ = {};
 
     const Evaluator& evaluator_;
 };

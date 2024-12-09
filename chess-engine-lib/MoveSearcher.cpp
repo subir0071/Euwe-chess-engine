@@ -991,7 +991,6 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
 
     updateMateDistance(score);
 
-    moveScorer_.reportMoveSearched(move, depth, gameState.getSideToMove());
     if (score > bestScore) {
         bestScore = score;
         bestMove  = move;
@@ -1007,6 +1006,7 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
         // the lower bound of our feasibility window.
         alpha = max(alpha, bestScore);
     }
+    moveScorer_.reportMoveSearched(move, depth, gameState.getSideToMove());
 
     return SearchMoveOutcome::Continue;
 }
