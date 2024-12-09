@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "reverse-futility-pruning");
+            UciFrontEnd uciFrontEnd(engine, "soft-time-limit");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

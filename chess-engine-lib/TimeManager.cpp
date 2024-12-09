@@ -40,7 +40,7 @@ bool TimeManager::shouldInterruptSearch(const std::uint64_t nodesSearched) const
 
     switch (mode_) {
         case TimeManagementMode::TimeControl: {
-            return shouldInterrupt(deadLine_, interruptCheckCounter_);
+            return shouldInterrupt(hardDeadLine_, interruptCheckCounter_);
         }
 
         case TimeManagementMode::Infinite: {
@@ -48,7 +48,7 @@ bool TimeManager::shouldInterruptSearch(const std::uint64_t nodesSearched) const
         }
 
         case TimeManagementMode::FixedTime: {
-            return shouldInterrupt(deadLine_, interruptCheckCounter_);
+            return shouldInterrupt(hardDeadLine_, interruptCheckCounter_);
         }
 
         case TimeManagementMode::FixedDepth: {
@@ -70,7 +70,7 @@ bool TimeManager::shouldStopAfterFullPly(const int depth) const {
 
     switch (mode_) {
         case TimeManagementMode::TimeControl: {
-            return timeIsUp(deadLine_);
+            return timeIsUp(softDeadLine_);
         }
 
         case TimeManagementMode::Infinite: {
@@ -78,7 +78,7 @@ bool TimeManager::shouldStopAfterFullPly(const int depth) const {
         }
 
         case TimeManagementMode::FixedTime: {
-            return timeIsUp(deadLine_);
+            return timeIsUp(softDeadLine_);
         }
 
         case TimeManagementMode::FixedDepth: {
@@ -106,18 +106,25 @@ void TimeManager::configureForTimeControl(
     const int expectedMovesToGo = min(expectedMovesLeft, movesToGo);
 
     // timeLeft includes the increment for the current move.
-    const std::chrono::milliseconds totalTime   = timeLeft + increment * (expectedMovesToGo - 1);
-    const std::chrono::milliseconds maxTime     = timeLeft * 8 / 10;
-    const std::chrono::milliseconds timeForMove = std::min(maxTime, totalTime / expectedMovesToGo);
+    const std::chrono::milliseconds totalTime  = timeLeft + increment * (expectedMovesToGo - 1);
+    const std::chrono::milliseconds maxTime    = timeLeft * 8 / 10 - moveOverhead_;
+    const std::chrono::milliseconds timeTarget = totalTime / expectedMovesToGo - moveOverhead_;
 
-    const std::chrono::milliseconds timeBudget = timeForMove - moveOverhead_;
+    const std::chrono::milliseconds hardTimeBudget = std::min(maxTime, timeTarget * 4 / 3);
+    const std::chrono::milliseconds softTimeBudget = hardTimeBudget / 2;
 
     if (frontEnd_) {
-        frontEnd_->reportDebugString(std::format("Time budget: {} ms", timeBudget.count()));
+        frontEnd_->reportDebugString(std::format(
+                "Time budget: soft {} ms / hard {} ms",
+                softTimeBudget.count(),
+                hardTimeBudget.count()));
     }
 
-    mode_     = TimeManagementMode::TimeControl;
-    deadLine_ = std::chrono::high_resolution_clock::now() + timeBudget;
+    const auto now = std::chrono::high_resolution_clock::now();
+
+    mode_         = TimeManagementMode::TimeControl;
+    softDeadLine_ = now + softTimeBudget;
+    hardDeadLine_ = now + hardTimeBudget;
 }
 
 void TimeManager::configureForInfiniteSearch() {
@@ -125,8 +132,9 @@ void TimeManager::configureForInfiniteSearch() {
 }
 
 void TimeManager::configureForFixedTimeSearch(const std::chrono::milliseconds time) {
-    mode_     = TimeManagementMode::FixedTime;
-    deadLine_ = std::chrono::high_resolution_clock::now() + time - moveOverhead_;
+    mode_         = TimeManagementMode::FixedTime;
+    softDeadLine_ = std::chrono::high_resolution_clock::now() + time - moveOverhead_;
+    hardDeadLine_ = softDeadLine_;
 }
 
 void TimeManager::configureForFixedDepthSearch(const int depth) {

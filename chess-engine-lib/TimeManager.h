@@ -43,7 +43,8 @@ class TimeManager {
 
     TimeManagementMode mode_ = TimeManagementMode::None;
 
-    std::chrono::high_resolution_clock::time_point deadLine_{};
+    std::chrono::high_resolution_clock::time_point softDeadLine_{};
+    std::chrono::high_resolution_clock::time_point hardDeadLine_{};
     int depthTarget_{};
     std::uint64_t nodesTarget_{};
 
