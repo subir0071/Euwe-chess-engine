@@ -2,7 +2,7 @@
 
 #include "chess-engine-lib/Eval.h"
 #include "chess-engine-lib/Math.h"
-#include "chess-engine-lib/MoveOrderer.h"
+#include "chess-engine-lib/MoveOrdering.h"
 
 #include <algorithm>
 #include <execution>
@@ -43,7 +43,7 @@ std::pair<EvalT, GameState> quiesce(
         EvalT alpha,
         EvalT beta,
         StackOfVectors<Move>& stack,
-        MoveOrderer& moveOrderer,
+        MoveScorer& moveScorer,
         const Evaluator& evaluator) {
     constexpr EvalT kDeltaPruningThreshold = 200;
 
@@ -83,14 +83,14 @@ std::pair<EvalT, GameState> quiesce(
         return {bestScore, bestState};
     }
 
-    auto orderedMoves = moveOrderer.orderMovesQuiescence(std::move(moves), std::nullopt, gameState);
+    auto moveOrderer = moveScorer.scoreMovesQuiescence(std::move(moves), std::nullopt, gameState);
 
-    while (const auto maybeMove = orderedMoves.getNextBestMoveQuiescence()) {
+    while (const auto maybeMove = moveOrderer.getNextBestMoveQuiescence()) {
         const Move move = *maybeMove;
 
         const auto unmakeInfo = gameState.makeMove(move);
 
-        auto [score, state] = quiesce(gameState, -beta, -alpha, stack, moveOrderer, evaluator);
+        auto [score, state] = quiesce(gameState, -beta, -alpha, stack, moveScorer, evaluator);
         score               = -score;
 
         gameState.unmakeMove(move, unmakeInfo);
@@ -136,9 +136,9 @@ void quiescePositions(std::vector<ScoredPosition>& scoredPositions) {
                 const EvalT beta           = baseEval + deltaThreshold + 1;
 
                 StackOfVectors<Move> moveStack;
-                MoveOrderer moveOrderer(evaluator);
+                MoveScorer moveScorer(evaluator);
                 auto [score, state] = quiesce(
-                        scoredPosition.gameState, alpha, beta, moveStack, moveOrderer, evaluator);
+                        scoredPosition.gameState, alpha, beta, moveStack, moveScorer, evaluator);
 
                 const EvalT evalDelta = std::abs(baseEval - score);
                 if (evalDelta >= deltaThreshold || std::abs(score) >= evalThreshold) {

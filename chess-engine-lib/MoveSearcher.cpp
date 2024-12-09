@@ -2,7 +2,7 @@
 
 #include "Eval.h"
 #include "Math.h"
-#include "MoveOrderer.h"
+#include "MoveOrdering.h"
 #include "SEE.h"
 #include "TTable.h"
 
@@ -126,7 +126,7 @@ class MoveSearcher::Impl {
 
     SearchTTable tTable_ = {};
 
-    MoveOrderer moveOrderer_;
+    MoveScorer moveScorer_;
 
     SearchStatistics searchStatistics_ = {};
 
@@ -271,7 +271,7 @@ FORCE_INLINE Move getTTableMove(const SearchTTPayload payload, const GameState& 
 }  // namespace
 
 MoveSearcher::Impl::Impl(const TimeManager& timeManager, const Evaluator& evaluator)
-    : moveOrderer_(evaluator), timeManager_(timeManager), evaluator_(evaluator) {
+    : moveScorer_(evaluator), timeManager_(timeManager), evaluator_(evaluator) {
     setTTableSize(getDefaultTTableSizeInMb());
 }
 
@@ -285,7 +285,7 @@ void MoveSearcher::Impl::newGame() {
     stopSearch_     = false;
     wasInterrupted_ = false;
 
-    moveOrderer_.newGame();
+    moveScorer_.newGame();
 
     tTable_.clear();
     tTableTick_ = 0;
@@ -566,10 +566,9 @@ EvalT MoveSearcher::Impl::search(
         return evaluateNoLegalMoves(gameState);
     }
 
-    auto orderedMoves =
-            moveOrderer_.orderMoves(std::move(moves), hashMove, gameState, lastMove, ply);
+    auto moveOrderer = moveScorer_.scoreMoves(std::move(moves), hashMove, gameState, lastMove, ply);
 
-    while (const auto maybeMove = orderedMoves.getNextBestMove(gameState)) {
+    while (const auto maybeMove = moveOrderer.getNextBestMove(gameState)) {
         const Move move = *maybeMove;
 
         // Futility pruning
@@ -586,7 +585,7 @@ EvalT MoveSearcher::Impl::search(
         }
 
         const int reduction = getDepthReduction(
-                move, movesSearched, orderedMoves.lastMoveWasLosing(), isPvNode, depth, extension);
+                move, movesSearched, moveOrderer.lastMoveWasLosing(), isPvNode, depth, extension);
 
         const auto outcome = searchMove(
                 gameState,
@@ -837,9 +836,9 @@ EvalT MoveSearcher::Impl::quiesce(
         return bestScore;
     }
 
-    auto orderedMoves = moveOrderer_.orderMovesQuiescence(std::move(moves), hashMove, gameState);
+    auto moveOrderer = moveScorer_.scoreMovesQuiescence(std::move(moves), hashMove, gameState);
 
-    while (const auto maybeMove = orderedMoves.getNextBestMoveQuiescence()) {
+    while (const auto maybeMove = moveOrderer.getNextBestMoveQuiescence()) {
         const Move move = *maybeMove;
 
         if (!isInCheck) {
@@ -992,13 +991,13 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
 
     updateMateDistance(score);
 
-    moveOrderer_.reportMoveSearched(move, depth, gameState.getSideToMove());
+    moveScorer_.reportMoveSearched(move, depth, gameState.getSideToMove());
     if (score > bestScore) {
         bestScore = score;
         bestMove  = move;
 
         if (bestScore >= beta) {
-            moveOrderer_.reportCutoff(move, lastMove, ply, depth, gameState.getSideToMove());
+            moveScorer_.reportCutoff(move, lastMove, ply, depth, gameState.getSideToMove());
 
             // Fail high; score is a lower bound.
             return SearchMoveOutcome::Cutoff;
@@ -1157,7 +1156,7 @@ void MoveSearcher::Impl::prepareForNewSearch(const GameState& gameState) {
     stopSearch_     = false;
     wasInterrupted_ = false;
 
-    moveOrderer_.prepareForNewSearch(gameState);
+    moveScorer_.prepareForNewSearch(gameState);
 
     ++tTableTick_;
 }

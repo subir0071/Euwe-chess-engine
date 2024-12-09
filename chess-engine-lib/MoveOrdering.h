@@ -13,9 +13,9 @@ using MoveEvalT = int;
 class Evaluator;
 class GameState;
 
-class OrderedMoves {
+class MoveOrderer {
   public:
-    OrderedMoves(StackVector<Move>&& moves, StackVector<MoveEvalT>&& moveScores, int firstMoveIdx);
+    MoveOrderer(StackVector<Move>&& moves, StackVector<MoveEvalT>&& moveScores, int firstMoveIdx);
 
     [[nodiscard]] std::optional<Move> getNextBestMove(const GameState& gameState);
     [[nodiscard]] std::optional<Move> getNextBestMoveQuiescence();
@@ -44,21 +44,21 @@ class OrderedMoves {
     int firstQuietIdx_;
 };
 
-class MoveOrderer {
+class MoveScorer {
   public:
-    MoveOrderer(const Evaluator& evaluator);
+    MoveScorer(const Evaluator& evaluator);
 
     void reportMoveSearched(const Move& move, int depth, Side side);
     void reportCutoff(const Move& move, const Move& lastMove, int ply, int depth, Side side);
 
-    [[nodiscard]] OrderedMoves orderMoves(
+    [[nodiscard]] MoveOrderer scoreMoves(
             StackVector<Move>&& moves,
             const std::optional<Move>& moveToIgnore,
             const GameState& gameState,
             const Move& lastMove,
             int ply) const;
 
-    [[nodiscard]] OrderedMoves orderMovesQuiescence(
+    [[nodiscard]] MoveOrderer scoreMovesQuiescence(
             StackVector<Move>&& moves,
             const std::optional<Move>& moveToIgnore,
             const GameState& gameState) const;

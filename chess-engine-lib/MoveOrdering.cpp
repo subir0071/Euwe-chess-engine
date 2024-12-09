@@ -1,4 +1,4 @@
-#include "MoveOrderer.h"
+#include "MoveOrdering.h"
 
 #include "Eval.h"
 #include "Macros.h"
@@ -53,7 +53,7 @@ scoreQueenPromotion(const Move& move, const GameState& gameState) {
 
 }  // namespace
 
-FORCE_INLINE OrderedMoves::OrderedMoves(
+FORCE_INLINE MoveOrderer::MoveOrderer(
         StackVector<Move>&& moves, StackVector<MoveEvalT>&& moveScores, const int firstMoveIdx)
     : state_(State::Init),
       moves_(std::move(moves)),
@@ -62,7 +62,7 @@ FORCE_INLINE OrderedMoves::OrderedMoves(
       firstLosingCaptureIdx_(moves_.size()),
       firstQuietIdx_(moves_.size()) {}
 
-FORCE_INLINE std::optional<Move> OrderedMoves::getNextBestMove(const GameState& gameState) {
+FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& gameState) {
     MY_ASSERT(
             0 <= firstLosingCaptureIdx_ && firstLosingCaptureIdx_ <= firstQuietIdx_
             && firstQuietIdx_ <= moves_.size());
@@ -162,7 +162,7 @@ FORCE_INLINE std::optional<Move> OrderedMoves::getNextBestMove(const GameState& 
     UNREACHABLE;
 }
 
-FORCE_INLINE std::optional<Move> OrderedMoves::getNextBestMoveQuiescence() {
+FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMoveQuiescence() {
     if (currentMoveIdx_ == moves_.size()) {
         return std::nullopt;
     }
@@ -179,11 +179,11 @@ FORCE_INLINE std::optional<Move> OrderedMoves::getNextBestMoveQuiescence() {
     return bestMove;
 }
 
-FORCE_INLINE bool OrderedMoves::lastMoveWasLosing() const {
+FORCE_INLINE bool MoveOrderer::lastMoveWasLosing() const {
     return state_ == State::LosingCaptures;
 }
 
-FORCE_INLINE int OrderedMoves::findHighestScoringMove(int startIdx, int endIdx) const {
+FORCE_INLINE int MoveOrderer::findHighestScoringMove(int startIdx, int endIdx) const {
     // Select best move based on pre-calculated scores using a simple linear search.
     // If the best move is then swapped to the front, repeated calls of this function end up doing
     // a selection sort.
@@ -203,7 +203,7 @@ FORCE_INLINE int OrderedMoves::findHighestScoringMove(int startIdx, int endIdx) 
     return bestMoveIdx;
 }
 
-FORCE_INLINE void OrderedMoves::partitionTacticalMoves() {
+FORCE_INLINE void MoveOrderer::partitionTacticalMoves() {
     MY_ASSERT(state_ == State::Init);
 
     const auto isTactical = [](const Move& move) {
@@ -245,24 +245,24 @@ FORCE_INLINE void OrderedMoves::partitionTacticalMoves() {
     firstLosingCaptureIdx_ = firstQuietIdx_;
 }
 
-MoveOrderer::MoveOrderer(const Evaluator& evaluator) : evaluator_(evaluator) {
+MoveScorer::MoveScorer(const Evaluator& evaluator) : evaluator_(evaluator) {
     moveScoreStack_.reserve(1'000);
     newGame();
 }
 
-FORCE_INLINE void MoveOrderer::reportMoveSearched(
+FORCE_INLINE void MoveScorer::reportMoveSearched(
         const Move& move, const int depth, const Side side) {
     updateHistoryForUse(move, depth, side);
 }
 
-FORCE_INLINE void MoveOrderer::reportCutoff(
+FORCE_INLINE void MoveScorer::reportCutoff(
         const Move& move, const Move& lastMove, const int ply, const int depth, const Side side) {
     storeKillerMove(move, ply);
     storeCounterMove(lastMove, move, side);
     updateHistoryForCutoff(move, depth, side);
 }
 
-FORCE_INLINE OrderedMoves MoveOrderer::orderMoves(
+FORCE_INLINE MoveOrderer MoveScorer::scoreMoves(
         StackVector<Move>&& moves,
         const std::optional<Move>& moveToIgnore,
         const GameState& gameState,
@@ -275,10 +275,10 @@ FORCE_INLINE OrderedMoves MoveOrderer::orderMoves(
 
     auto moveScores = scoreMoves(moves, moveIdx, gameState, lastMove, ply);
 
-    return OrderedMoves(std::move(moves), std::move(moveScores), moveIdx);
+    return MoveOrderer(std::move(moves), std::move(moveScores), moveIdx);
 }
 
-FORCE_INLINE OrderedMoves MoveOrderer::orderMovesQuiescence(
+FORCE_INLINE MoveOrderer MoveScorer::scoreMovesQuiescence(
         StackVector<Move>&& moves,
         const std::optional<Move>& moveToIgnore,
         const GameState& gameState) const {
@@ -289,10 +289,10 @@ FORCE_INLINE OrderedMoves MoveOrderer::orderMovesQuiescence(
 
     auto moveScores = scoreMovesQuiesce(moves, moveIdx, gameState);
 
-    return OrderedMoves(std::move(moves), std::move(moveScores), moveIdx);
+    return MoveOrderer(std::move(moves), std::move(moveScores), moveIdx);
 }
 
-void MoveOrderer::newGame() {
+void MoveScorer::newGame() {
     moveClockForKillerMoves_ = 0;
     killerMoves_             = {};
     counterMoves_            = {};
@@ -300,22 +300,22 @@ void MoveOrderer::newGame() {
     initializeHistoryFromPieceSquare();
 }
 
-void MoveOrderer::prepareForNewSearch(const GameState& gameState) {
+void MoveScorer::prepareForNewSearch(const GameState& gameState) {
     shiftKillerMoves(gameState.getHalfMoveClock());
     scaleDownHistory();
 }
 
-FORCE_INLINE MoveOrderer::KillerMoves& MoveOrderer::getKillerMoves(const int ply) {
+FORCE_INLINE MoveScorer::KillerMoves& MoveScorer::getKillerMoves(const int ply) {
     MY_ASSERT(ply < kMaxDepth);
     return killerMoves_[ply];
 }
 
-FORCE_INLINE const MoveOrderer::KillerMoves& MoveOrderer::getKillerMoves(const int ply) const {
+FORCE_INLINE const MoveScorer::KillerMoves& MoveScorer::getKillerMoves(const int ply) const {
     MY_ASSERT(ply < kMaxDepth);
     return killerMoves_[ply];
 }
 
-FORCE_INLINE void MoveOrderer::storeKillerMove(const Move& move, const int ply) {
+FORCE_INLINE void MoveScorer::storeKillerMove(const Move& move, const int ply) {
     if (isCapture(move.flags) || isPromotion(move.flags)) {
         // Only store 'quiet' moves as killer moves.
         return;
@@ -333,14 +333,14 @@ FORCE_INLINE void MoveOrderer::storeKillerMove(const Move& move, const int ply) 
     plyKillerMoves[0] = move;
 }
 
-FORCE_INLINE Move MoveOrderer::getCounterMove(const Move& move, const Side side) const {
+FORCE_INLINE Move MoveScorer::getCounterMove(const Move& move, const Side side) const {
     if (move.pieceToMove == Piece::Invalid) {
         return {};
     }
     return counterMoves_[(int)side][(int)move.pieceToMove][(int)move.to];
 }
 
-FORCE_INLINE void MoveOrderer::storeCounterMove(
+FORCE_INLINE void MoveScorer::storeCounterMove(
         const Move& lastMove, const Move& counter, const Side side) {
     if (isCapture(counter.flags) || isPromotion(counter.flags)) {
         // Only store 'quiet' moves as counter moves.
@@ -352,11 +352,11 @@ FORCE_INLINE void MoveOrderer::storeCounterMove(
     counterMoves_[(int)side][(int)lastMove.pieceToMove][(int)lastMove.to] = counter;
 }
 
-FORCE_INLINE int MoveOrderer::getHistoryWeight(const int depth) {
+FORCE_INLINE int MoveScorer::getHistoryWeight(const int depth) {
     return depth * depth;
 }
 
-FORCE_INLINE void MoveOrderer::updateHistoryForCutoff(
+FORCE_INLINE void MoveScorer::updateHistoryForCutoff(
         const Move& move, const int depth, const Side side) {
     if (isCapture(move.flags) || isPromotion(move.flags)) {
         // Only update history for 'quiet' moves.
@@ -369,7 +369,7 @@ FORCE_INLINE void MoveOrderer::updateHistoryForCutoff(
     historyCutOff_[(int)side][piece][square] += getHistoryWeight(depth);
 }
 
-FORCE_INLINE void MoveOrderer::updateHistoryForUse(
+FORCE_INLINE void MoveScorer::updateHistoryForUse(
         const Move& move, const int depth, const Side side) {
     if (isCapture(move.flags) || isPromotion(move.flags)) {
         // Only update history for 'quiet' moves.
@@ -382,7 +382,7 @@ FORCE_INLINE void MoveOrderer::updateHistoryForUse(
     historyUsed_[(int)side][piece][square] += getHistoryWeight(depth);
 }
 
-void MoveOrderer::shiftKillerMoves(const int halfMoveClock) {
+void MoveScorer::shiftKillerMoves(const int halfMoveClock) {
     const int shiftAmount = halfMoveClock - moveClockForKillerMoves_;
 
     for (int ply = 0; ply < kMaxDepth - shiftAmount; ++ply) {
@@ -392,7 +392,7 @@ void MoveOrderer::shiftKillerMoves(const int halfMoveClock) {
     moveClockForKillerMoves_ = halfMoveClock;
 }
 
-void MoveOrderer::initializeHistoryFromPieceSquare() {
+void MoveScorer::initializeHistoryFromPieceSquare() {
     static constexpr int kNumScaleBits        = 7;   // 128
     static constexpr int kPieceSquareBiasBits = 16;  // ~65k
 
@@ -413,7 +413,7 @@ void MoveOrderer::initializeHistoryFromPieceSquare() {
     }
 }
 
-void MoveOrderer::scaleDownHistory() {
+void MoveScorer::scaleDownHistory() {
     static constexpr int kScaleDownBits = 4;   // 16
     static constexpr int kTargetBits    = 10;  // 1024
     static constexpr int kCountlTarget  = 32 - kTargetBits;
@@ -433,7 +433,7 @@ void MoveOrderer::scaleDownHistory() {
     }
 }
 
-FORCE_INLINE void MoveOrderer::ignoreMove(
+FORCE_INLINE void MoveScorer::ignoreMove(
         const Move& moveToIgnore, StackVector<Move>& moves, int& moveIdx) const {
     const auto hashMoveIt = std::find(moves.begin(), moves.end(), moveToIgnore);
     MY_ASSERT_DEBUG(hashMoveIt != moves.end());
@@ -443,7 +443,7 @@ FORCE_INLINE void MoveOrderer::ignoreMove(
     }
 }
 
-StackVector<MoveEvalT> MoveOrderer::scoreMoves(
+StackVector<MoveEvalT> MoveScorer::scoreMoves(
         const StackVector<Move>& moves,
         const int firstMoveIdx,
         const GameState& gameState,
@@ -499,7 +499,7 @@ StackVector<MoveEvalT> MoveOrderer::scoreMoves(
     return scores;
 }
 
-StackVector<MoveEvalT> MoveOrderer::scoreMovesQuiesce(
+StackVector<MoveEvalT> MoveScorer::scoreMovesQuiesce(
         const StackVector<Move>& moves, const int firstMoveIdx, const GameState& gameState) const {
     StackVector<MoveEvalT> scores = moveScoreStack_.makeStackVector();
 

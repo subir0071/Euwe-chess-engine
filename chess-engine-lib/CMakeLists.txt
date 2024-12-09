@@ -10,7 +10,7 @@ set(
     "GameState.cpp"
     "GameStateStringOps.cpp"
     "Move.cpp"
-    "MoveOrderer.cpp"
+    "MoveOrdering.cpp"
     "MoveSearcher.cpp"
     "PawnMasks.cpp"
     "Perft.cpp"
