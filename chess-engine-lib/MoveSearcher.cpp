@@ -428,6 +428,30 @@ EvalT MoveSearcher::Impl::search(
         depth += extension;
     }
 
+    const bool boundsAreMate = isMate(alpha) || isMate(beta);
+
+    constexpr int kMaxFutilityPruningDepth = 3;
+    const bool futilityPruningEnabled      = depth <= kMaxFutilityPruningDepth && !boundsAreMate;
+
+    constexpr int kMaxReverseFutilityPruningDepth = 5;
+    const bool reverseFutilityPruningEnabled =
+            !isPvNode && !isInCheck && depth <= kMaxReverseFutilityPruningDepth && !boundsAreMate;
+
+    EvalT staticEval = -kInfiniteEval;
+    if (futilityPruningEnabled || reverseFutilityPruningEnabled) {
+        staticEval = evaluator_.evaluate(gameState);
+    }
+
+    if (reverseFutilityPruningEnabled) {
+        static constexpr EvalT futilityMarginPerDepth = 140;
+        const int futilityValue                       = staticEval - futilityMarginPerDepth * depth;
+
+        if (futilityValue >= beta) {
+            // Return a conservative lower bound (fail-hard).
+            return beta;
+        }
+    }
+
     constexpr int kNullMoveReduction = 3;
     if (nullMovePruningAllowed(gameState, isPvNode, beta, isInCheck, depth, ply, lastNullMovePly)) {
         const int nullMoveSearchDepth = max(1, depth - kNullMoveReduction - 1);
@@ -549,15 +573,6 @@ EvalT MoveSearcher::Impl::search(
             // maximizing.
             return bestScore;
         }
-    }
-
-    const int maxFutilityPruningDepth = 3;
-    const bool futilityPruningEnabled =
-            depth <= maxFutilityPruningDepth && !isMate(alpha) && !isMate(beta);
-
-    EvalT staticEval = -kInfiniteEval;
-    if (futilityPruningEnabled) {
-        staticEval = evaluator_.evaluate(gameState);
     }
 
     auto moves = gameState.generateMoves(stack, enemyControl);

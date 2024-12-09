@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "history-gravity");
+            UciFrontEnd uciFrontEnd(engine, "reverse-futility-pruning");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
