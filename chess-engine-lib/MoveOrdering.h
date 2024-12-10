@@ -22,6 +22,7 @@ enum class MoveType {
     GoodTactical,
     LosingCapture,
 #ifdef TRACK_CUTOFF_STATISTICS
+    KillerCounterMove,
     KillerMove,
     CounterMove,
     GoodHistory,

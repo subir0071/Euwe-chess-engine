@@ -18,14 +18,19 @@ constexpr int kCounterMoveBonus = 10'000;
 
 constexpr int kMaxHistory = 4096;
 
+constexpr int kMinKillerCounterMoveScore = kKillerMoveBonus + kCounterMoveBonus - kMaxHistory;
+constexpr int kMaxKillerCounterMoveScore = kKillerMoveBonus + kCounterMoveBonus + kMaxHistory;
+
 constexpr int kMinKillerMoveScore = kKillerMoveBonus - kMaxHistory;
-constexpr int kMaxKillerMoveScore = kKillerMoveBonus + kCounterMoveBonus + kMaxHistory;
+constexpr int kMaxKillerMoveScore = kKillerMoveBonus + kMaxHistory;
 
 constexpr int kMinCounterMoveScore = kCounterMoveBonus - kMaxHistory;
 constexpr int kMaxCounterMoveScore = kCounterMoveBonus + kMaxHistory;
 
-static_assert(kMaxKillerMoveScore < kCaptureBonus);
-static_assert(kMaxKillerMoveScore < kPromotionBonus);
+static_assert(kMaxKillerCounterMoveScore < kCaptureBonus);
+static_assert(kMaxKillerCounterMoveScore < kPromotionBonus);
+
+static_assert(kMaxKillerMoveScore < kMinKillerCounterMoveScore);
 
 static_assert(kMaxCounterMoveScore < kMinKillerMoveScore);
 
@@ -135,18 +140,21 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& g
             if (currentMoveIdx_ < moves_.size()) {
                 const int bestMoveIdx = findHighestScoringMove(currentMoveIdx_, moves_.size());
 
-                const Move bestMove     = moves_[bestMoveIdx];
-                const int bestMoveScore = moveScores_[bestMoveIdx];
+                const Move bestMove = moves_[bestMoveIdx];
+#ifdef TRACK_CUTOFF_STATISTICS
+                const int bestScore = moveScores_[bestMoveIdx];
+#endif
 
                 std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
                 std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
                 ++currentMoveIdx_;
 
 #ifdef TRACK_CUTOFF_STATISTICS
-                lastMoveType_ = bestMoveScore > kMinKillerMoveScore  ? MoveType::KillerMove
-                              : bestMoveScore > kMinCounterMoveScore ? MoveType::CounterMove
-                              : bestMoveScore > 0                    ? MoveType::GoodHistory
-                                                                     : MoveType::BadHistory;
+                lastMoveType_ = bestScore > kMinKillerCounterMoveScore ? MoveType::KillerCounterMove
+                              : bestScore > kMinKillerMoveScore        ? MoveType::KillerMove
+                              : bestScore > kMinCounterMoveScore       ? MoveType::CounterMove
+                              : bestScore > 0                          ? MoveType::GoodHistory
+                                                                       : MoveType::BadHistory;
 #else
                 lastMoveType_ = MoveType::Quiet;
 #endif
@@ -393,6 +401,8 @@ void MoveScorer::printCutoffStatistics(std::ostream& out) const {
                 return "GoodTactical";
             case MoveType::LosingCapture:
                 return "LosingCapture";
+            case MoveType::KillerCounterMove:
+                return "KillerCounterMove";
             case MoveType::KillerMove:
                 return "KillerMove";
             case MoveType::CounterMove:
