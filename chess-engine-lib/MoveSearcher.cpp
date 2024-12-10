@@ -11,6 +11,7 @@
 #include <atomic>
 #include <bit>
 #include <limits>
+#include <sstream>
 
 #include <cstdint>
 #include <cstring>
@@ -98,6 +99,7 @@ class MoveSearcher::Impl {
     [[nodiscard]] SearchMoveOutcome searchMove(
             GameState& gameState,
             const Move& move,
+            MoveType moveType,
             int depth,
             int reduction,
             int ply,
@@ -538,6 +540,7 @@ EvalT MoveSearcher::Impl::search(
         const auto outcome = searchMove(
                 gameState,
                 *hashMove,
+                MoveType::HashMove,
                 depth,
                 /*reduction =*/0,
                 ply,
@@ -605,6 +608,7 @@ EvalT MoveSearcher::Impl::search(
         const auto outcome = searchMove(
                 gameState,
                 move,
+                moveOrderer.getLastMoveType(),
                 depth,
                 reduction,
                 ply,
@@ -934,6 +938,7 @@ EvalT MoveSearcher::Impl::quiesce(
 FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMove(
         GameState& gameState,
         const Move& move,
+        const MoveType moveType,
         const int depth,
         const int reduction,
         const int ply,
@@ -1011,7 +1016,8 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
         bestMove  = move;
 
         if (bestScore >= beta) {
-            moveScorer_.reportCutoff(move, lastMove, ply, depth, gameState.getSideToMove());
+            moveScorer_.reportCutoff(
+                    move, moveType, lastMove, ply, depth, gameState.getSideToMove());
 
             // Fail high; score is a lower bound.
             return SearchMoveOutcome::Cutoff;
@@ -1021,7 +1027,7 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
         // the lower bound of our feasibility window.
         alpha = max(alpha, bestScore);
     }
-    moveScorer_.reportMoveSearched(move, depth, gameState.getSideToMove());
+    moveScorer_.reportNonCutoff(move, moveType, depth, gameState.getSideToMove());
 
     return SearchMoveOutcome::Continue;
 }
@@ -1148,8 +1154,22 @@ RootSearchResult MoveSearcher::Impl::searchForBestMove(
         std::optional<EvalT> evalGuess) {
     searchStatistics_.selectiveDepth = 0;
 
+    moveScorer_.resetCutoffStatistics();
+
+    const auto reportCutoffStatistics = [this]() {
+#ifdef TRACK_CUTOFF_STATISTICS
+        std::stringstream ss;
+        moveScorer_.printCutoffStatistics(ss);
+        frontEnd_->reportDebugString(ss.str());
+#endif
+    };
+
     if (evalGuess) {
-        return aspirationWindowSearch(gameState, depth, stack, *evalGuess);
+        auto searchResult = aspirationWindowSearch(gameState, depth, stack, *evalGuess);
+
+        reportCutoffStatistics();
+
+        return searchResult;
     } else {
         const auto searchEval =
                 search(gameState,
@@ -1160,6 +1180,9 @@ RootSearchResult MoveSearcher::Impl::searchForBestMove(
                        /*lastMove =*/{},
                        /*lastNullMovePly =*/INT_MIN,
                        stack);
+
+        reportCutoffStatistics();
+
         return {.principalVariation = extractPv(gameState, stack, depth),
                 .eval               = searchEval,
                 .wasInterrupted     = wasInterrupted_};

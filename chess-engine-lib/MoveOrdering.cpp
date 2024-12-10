@@ -5,16 +5,31 @@
 #include "MyAssert.h"
 #include "SEE.h"
 
+#include <print>
+
 namespace {
 
 // Killer and counter bonuses can potentially both apply.
 // Make sure that the combined bonus is less than the capture and promotion bonuses.
-constexpr int kCaptureBonus     = 30'000;
-constexpr int kPromotionBonus   = 30'000;
-constexpr int kKillerMoveBonus  = 10'000;
-constexpr int kCounterMoveBonus = 5'000;
+constexpr int kCaptureBonus     = 40'000;
+constexpr int kPromotionBonus   = 40'000;
+constexpr int kKillerMoveBonus  = 20'000;
+constexpr int kCounterMoveBonus = 10'000;
 
 constexpr int kMaxHistory = 4096;
+
+constexpr int kMinKillerMoveScore = kKillerMoveBonus - kMaxHistory;
+constexpr int kMaxKillerMoveScore = kKillerMoveBonus + kCounterMoveBonus + kMaxHistory;
+
+constexpr int kMinCounterMoveScore = kCounterMoveBonus - kMaxHistory;
+constexpr int kMaxCounterMoveScore = kCounterMoveBonus + kMaxHistory;
+
+static_assert(kMaxKillerMoveScore < kCaptureBonus);
+static_assert(kMaxKillerMoveScore < kPromotionBonus);
+
+static_assert(kMaxCounterMoveScore < kMinKillerMoveScore);
+
+static_assert(kMaxHistory < kMinCounterMoveScore);
 
 [[nodiscard]] FORCE_INLINE MoveEvalT
 scoreCapture(const Evaluator& evaluator, const Move& move, const GameState& gameState) {
@@ -62,7 +77,8 @@ FORCE_INLINE MoveOrderer::MoveOrderer(
       moveScores_(std::move(moveScores)),
       currentMoveIdx_(firstMoveIdx),
       firstLosingCaptureIdx_(moves_.size()),
-      firstQuietIdx_(moves_.size()) {}
+      firstQuietIdx_(moves_.size()),
+      lastMoveType_(MoveType::None) {}
 
 FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& gameState) {
     MY_ASSERT(
@@ -104,6 +120,7 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& g
                 std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
                 ++currentMoveIdx_;
 
+                lastMoveType_ = MoveType::GoodTactical;
                 return bestMove;
             }
 
@@ -118,11 +135,21 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& g
             if (currentMoveIdx_ < moves_.size()) {
                 const int bestMoveIdx = findHighestScoringMove(currentMoveIdx_, moves_.size());
 
-                const Move bestMove = moves_[bestMoveIdx];
+                const Move bestMove     = moves_[bestMoveIdx];
+                const int bestMoveScore = moveScores_[bestMoveIdx];
 
                 std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
                 std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
                 ++currentMoveIdx_;
+
+#ifdef TRACK_CUTOFF_STATISTICS
+                lastMoveType_ = bestMoveScore > kMinKillerMoveScore  ? MoveType::KillerMove
+                              : bestMoveScore > kMinCounterMoveScore ? MoveType::CounterMove
+                              : bestMoveScore > 0                    ? MoveType::GoodHistory
+                                                                     : MoveType::BadHistory;
+#else
+                lastMoveType_ = MoveType::Quiet;
+#endif
 
                 return bestMove;
             }
@@ -145,6 +172,8 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& g
                 const int listIdx           = lastLosingMoveIdx - losingMoveIdx;
 
                 ++currentMoveIdx_;
+
+                lastMoveType_ = MoveType::LosingCapture;
 
                 MY_ASSERT(listIdx >= firstLosingCaptureIdx_ && listIdx < firstQuietIdx_);
                 return moves_[listIdx];
@@ -182,7 +211,11 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMoveQuiescence() {
 }
 
 FORCE_INLINE bool MoveOrderer::lastMoveWasLosing() const {
-    return state_ == State::LosingCaptures;
+    return getLastMoveType() == MoveType::LosingCapture;
+}
+
+FORCE_INLINE MoveType MoveOrderer::getLastMoveType() const {
+    return lastMoveType_;
 }
 
 FORCE_INLINE int MoveOrderer::findHighestScoringMove(int startIdx, int endIdx) const {
@@ -252,16 +285,30 @@ MoveScorer::MoveScorer(const Evaluator& evaluator) : evaluator_(evaluator) {
     newGame();
 }
 
-FORCE_INLINE void MoveScorer::reportMoveSearched(
-        const Move& move, const int depth, const Side side) {
-    updateHistoryForUse(move, depth, side);
+FORCE_INLINE void MoveScorer::reportNonCutoff(
+        const Move& move, const MoveType moveType, const int depth, const Side side) {
+    updateHistoryForNonCutoff(move, depth, side);
+
+#ifdef TRACK_CUTOFF_STATISTICS
+    ++numSearchedByMoveType_[(int)moveType];
+#endif
 }
 
 FORCE_INLINE void MoveScorer::reportCutoff(
-        const Move& move, const Move& lastMove, const int ply, const int depth, const Side side) {
+        const Move& move,
+        const MoveType moveType,
+        const Move& lastMove,
+        const int ply,
+        const int depth,
+        const Side side) {
     storeKillerMove(move, ply);
     storeCounterMove(lastMove, move, side);
     updateHistoryForCutoff(move, depth, side);
+
+#ifdef TRACK_CUTOFF_STATISTICS
+    ++numSearchedByMoveType_[(int)moveType];
+    ++numCutoffsByMoveType_[(int)moveType];
+#endif
 }
 
 FORCE_INLINE MoveOrderer MoveScorer::scoreMoves(
@@ -304,6 +351,85 @@ void MoveScorer::newGame() {
 
 void MoveScorer::prepareForNewSearch(const GameState& gameState) {
     shiftKillerMoves(gameState.getHalfMoveClock());
+}
+
+void MoveScorer::resetCutoffStatistics() {
+#ifdef TRACK_CUTOFF_STATISTICS
+    numSearchedByMoveType_.fill(0);
+    numCutoffsByMoveType_.fill(0);
+#endif
+}
+
+void MoveScorer::printCutoffStatistics(std::ostream& out) const {
+#ifdef TRACK_CUTOFF_STATISTICS
+    int totalSearched                             = 0;
+    int totalNumCutoffs                           = 0;
+    std::array<double, kNumMoveTypes> cutoffRates = {};
+
+    // skip MoveType::None
+    for (int i = 1; i < kNumMoveTypes; ++i) {
+        totalSearched += numSearchedByMoveType_[i];
+        totalNumCutoffs += numCutoffsByMoveType_[i];
+        cutoffRates[i] = numSearchedByMoveType_[i] == 0
+                               ? 0.0
+                               : (double)numCutoffsByMoveType_[i] / numSearchedByMoveType_[i];
+    }
+
+    const double cutoffRate = totalSearched == 0 ? 0.0 : (double)totalNumCutoffs / totalSearched;
+
+    std::array<double, kNumMoveTypes> cutoffFraction = {};
+    for (int i = 1; i < kNumMoveTypes; ++i) {
+        cutoffFraction[i] =
+                totalNumCutoffs == 0 ? 0.0 : (double)numCutoffsByMoveType_[i] / totalNumCutoffs;
+    }
+
+    const auto moveTypeToString = [](const MoveType moveType) {
+        switch (moveType) {
+            case MoveType::None:
+                UNREACHABLE;
+            case MoveType::HashMove:
+                return "HashMove";
+            case MoveType::GoodTactical:
+                return "GoodTactical";
+            case MoveType::LosingCapture:
+                return "LosingCapture";
+            case MoveType::KillerMove:
+                return "KillerMove";
+            case MoveType::CounterMove:
+                return "CounterMove";
+            case MoveType::GoodHistory:
+                return "GoodHistory";
+            case MoveType::BadHistory:
+                return "BadHistory";
+            case MoveType::NumMoveTypes:
+                UNREACHABLE;
+        }
+        UNREACHABLE;
+    };
+
+    std::println(
+            out,
+            "Total cutoffs / searched: {} / {} ({:.1f}%)",
+            totalNumCutoffs,
+            totalSearched,
+            cutoffRate * 100);
+    std::println(out, "Cutoff / searched by move type:");
+    for (int i = 1; i < kNumMoveTypes; ++i) {
+        std::println(
+                out,
+                "\t{}: {} / {} ({:.1f}%)",
+                moveTypeToString((MoveType)i),
+                numCutoffsByMoveType_[i],
+                numSearchedByMoveType_[i],
+                cutoffRates[i] * 100);
+    }
+
+    std::println(out, "Cutoff fraction by move type:");
+    for (int i = 1; i < kNumMoveTypes; ++i) {
+        std::println(out, "\t{}: {:.1f}%", moveTypeToString((MoveType)i), cutoffFraction[i] * 100);
+    }
+
+#endif
 }
 
 FORCE_INLINE MoveScorer::KillerMoves& MoveScorer::getKillerMoves(const int ply) {
@@ -362,7 +488,7 @@ FORCE_INLINE void MoveScorer::updateHistoryForCutoff(
     updateHistory(move, side, getHistoryWeight(depth));
 }
 
-FORCE_INLINE void MoveScorer::updateHistoryForUse(
+FORCE_INLINE void MoveScorer::updateHistoryForNonCutoff(
         const Move& move, const int depth, const Side side) {
     updateHistory(move, side, -getHistoryWeight(depth));
 }

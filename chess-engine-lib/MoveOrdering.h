@@ -6,12 +6,33 @@
 
 #include <array>
 #include <optional>
+#include <ostream>
 #include <utility>
 
 using MoveEvalT = int;
 
 class Evaluator;
 class GameState;
+
+//#define TRACK_CUTOFF_STATISTICS
+
+enum class MoveType {
+    None,
+    HashMove,
+    GoodTactical,
+    LosingCapture,
+#ifdef TRACK_CUTOFF_STATISTICS
+    KillerMove,
+    CounterMove,
+    GoodHistory,
+    BadHistory,
+#else
+    Quiet,
+#endif
+    NumMoveTypes,
+};
+
+static constexpr std::size_t kNumMoveTypes = (std::size_t)MoveType::NumMoveTypes;
 
 class MoveOrderer {
   public:
@@ -21,6 +42,7 @@ class MoveOrderer {
     [[nodiscard]] std::optional<Move> getNextBestMoveQuiescence();
 
     [[nodiscard]] bool lastMoveWasLosing() const;
+    [[nodiscard]] MoveType getLastMoveType() const;
 
   private:
     enum class State {
@@ -42,14 +64,22 @@ class MoveOrderer {
     int currentMoveIdx_;
     int firstLosingCaptureIdx_;
     int firstQuietIdx_;
+
+    MoveType lastMoveType_;
 };
 
 class MoveScorer {
   public:
     MoveScorer(const Evaluator& evaluator);
 
-    void reportMoveSearched(const Move& move, int depth, Side side);
-    void reportCutoff(const Move& move, const Move& lastMove, int ply, int depth, Side side);
+    void reportNonCutoff(const Move& move, MoveType moveType, int depth, Side side);
+    void reportCutoff(
+            const Move& move,
+            MoveType moveType,
+            const Move& lastMove,
+            int ply,
+            int depth,
+            Side side);
 
     [[nodiscard]] MoveOrderer scoreMoves(
             StackVector<Move>&& moves,
@@ -65,6 +95,10 @@ class MoveScorer {
 
     void newGame();
     void prepareForNewSearch(const GameState& gameState);
+
+    void resetCutoffStatistics();
+
+    void printCutoffStatistics(std::ostream& out) const;
 
   private:
     static constexpr std::size_t kNumKillerMoves = 2;
@@ -91,7 +125,7 @@ class MoveScorer {
 
     [[nodiscard]] static int getHistoryWeight(int depth);
     void updateHistoryForCutoff(const Move& move, int depth, Side side);
-    void updateHistoryForUse(const Move& move, int depth, Side side);
+    void updateHistoryForNonCutoff(const Move& move, int depth, Side side);
     void updateHistory(const Move& move, Side side, HistoryValueT update);
 
     void shiftKillerMoves(int halfMoveClock);
@@ -121,4 +155,9 @@ class MoveScorer {
     HistoryPerSide history_ = {};
 
     const Evaluator& evaluator_;
+
+#ifdef TRACK_CUTOFF_STATISTICS
+    std::array<int, kNumMoveTypes> numSearchedByMoveType_ = {};
+    std::array<int, kNumMoveTypes> numCutoffsByMoveType_  = {};
+#endif
 };
