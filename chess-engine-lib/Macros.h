@@ -22,3 +22,5 @@
 #endif
 
 #endif  // NDEBUG
+
+#define IMPLIES(a, b) (!(a) || (b))

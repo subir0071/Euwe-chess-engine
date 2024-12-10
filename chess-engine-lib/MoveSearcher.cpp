@@ -828,8 +828,6 @@ EvalT MoveSearcher::Impl::quiesce(
             }
 
             alpha = max(alpha, score);
-        } else {
-            hashMove = std::nullopt;
         }
     }
 
@@ -855,6 +853,7 @@ EvalT MoveSearcher::Impl::quiesce(
         return bestScore;
     }
 
+    // Ignore the hash move even if we didn't try it, since that would mean we pruned it.
     auto moveOrderer = moveScorer_.scoreMovesQuiescence(std::move(moves), hashMove, gameState);
 
     while (const auto maybeMove = moveOrderer.getNextBestMoveQuiescence()) {

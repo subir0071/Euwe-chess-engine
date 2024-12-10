@@ -5,8 +5,6 @@
 #include "MyAssert.h"
 #include "PieceControl.h"
 
-#define IMPLIES(a, b) (!(a) || (b))
-
 namespace {
 
 [[nodiscard]] FORCE_INLINE BitBoard

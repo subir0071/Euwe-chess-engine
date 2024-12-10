@@ -327,7 +327,7 @@ FORCE_INLINE MoveOrderer MoveScorer::scoreMoves(
         const int ply) const {
     int moveIdx = 0;
     if (moveToIgnore) {
-        ignoreMove(*moveToIgnore, moves, moveIdx);
+        ignoreMove(*moveToIgnore, moves, moveIdx, /*ignoredMoveShouldExist*/ true);
     }
 
     auto moveScores = scoreMoves(moves, moveIdx, gameState, lastMove, ply);
@@ -341,7 +341,7 @@ FORCE_INLINE MoveOrderer MoveScorer::scoreMovesQuiescence(
         const GameState& gameState) const {
     int moveIdx = 0;
     if (moveToIgnore) {
-        ignoreMove(*moveToIgnore, moves, moveIdx);
+        ignoreMove(*moveToIgnore, moves, moveIdx, /*ignoredMoveShouldExist*/ false);
     }
 
     auto moveScores = scoreMovesQuiesce(moves, moveIdx, gameState);
@@ -549,9 +549,12 @@ void MoveScorer::initializeHistoryFromPieceSquare() {
 }
 
 FORCE_INLINE void MoveScorer::ignoreMove(
-        const Move& moveToIgnore, StackVector<Move>& moves, int& moveIdx) const {
+        const Move& moveToIgnore,
+        StackVector<Move>& moves,
+        int& moveIdx,
+        const bool ignoredMoveShouldExist) const {
     const auto hashMoveIt = std::find(moves.begin(), moves.end(), moveToIgnore);
-    MY_ASSERT_DEBUG(hashMoveIt != moves.end());
+    MY_ASSERT_DEBUG(IMPLIES(ignoredMoveShouldExist, hashMoveIt != moves.end()));
     if (hashMoveIt != moves.end()) {
         std::swap(*hashMoveIt, moves.front());
         ++moveIdx;

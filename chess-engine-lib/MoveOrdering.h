@@ -132,7 +132,11 @@ class MoveScorer {
     void shiftKillerMoves(int halfMoveClock);
     void initializeHistoryFromPieceSquare();
 
-    void ignoreMove(const Move& moveToIgnore, StackVector<Move>& moves, int& moveIdx) const;
+    void ignoreMove(
+            const Move& moveToIgnore,
+            StackVector<Move>& moves,
+            int& moveIdx,
+            bool ignoredMoveShouldExist) const;
 
     [[nodiscard]] StackVector<MoveEvalT> scoreMoves(
             const StackVector<Move>& moves,
