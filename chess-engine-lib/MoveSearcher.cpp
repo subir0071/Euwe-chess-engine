@@ -305,8 +305,17 @@ FORCE_INLINE void MoveSearcher::Impl::updateTTable(
         const HashT hash) {
     ScoreType scoreType;
     if (stoppedEarly) {
-        // Don't trust scores from partial search.
-        scoreType = ScoreType::NotSet;
+        if (bestScore > alphaOrig) {
+            // Alpha was raised (but didn't cause a cut off), and the search was interrupted.
+            // So this is a partially searched PV node.
+            // The score is a lower bound since we raised alpha. Store the score and the best move so
+            // far.
+            scoreType = ScoreType::LowerBound;
+        } else {
+            // No move raised alpha but we didn't search all moves, so we don't know if the score is
+            // a lower or upper bound.
+            scoreType = ScoreType::NotSet;
+        }
     } else if (bestScore <= alphaOrig) {
         // Best score is below original feasibility window, so it's an upper bound.
         scoreType = ScoreType::UpperBound;

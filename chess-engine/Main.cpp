@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "soft-time-limit");
+            UciFrontEnd uciFrontEnd(engine, "partial-search-tt-lower-bound");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
