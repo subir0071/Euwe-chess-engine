@@ -44,11 +44,6 @@ class GameState {
         int lastReversiblePositionHashIdx  = 0;
     };
 
-    struct PieceOccupancyBitBoards {
-        BitBoard ownPiece   = BitBoard::Empty;
-        BitBoard enemyPiece = BitBoard::Empty;
-    };
-
     [[nodiscard]] static GameState fromFen(std::string_view fenString);
     [[nodiscard]] static GameState startingPosition();
 
@@ -123,7 +118,17 @@ class GameState {
 
     [[nodiscard]] HashT getBoardHash() const { return boardHash_; }
 
-    [[nodiscard]] const PieceOccupancyBitBoards& getOccupancy() const { return occupancy_; }
+    [[nodiscard]] BitBoard getAnyOccupancy() const { return occupancy_[0] | occupancy_[1]; }
+
+    [[nodiscard]] const BitBoard& getSideOccupancy(const Side side) const {
+        return occupancy_[(int)side];
+    }
+
+    [[nodiscard]] const BitBoard& getOwnOccupancy() const { return getSideOccupancy(sideToMove_); }
+
+    [[nodiscard]] const BitBoard& getEnemyOccupancy() const {
+        return getSideOccupancy(nextSide(sideToMove_));
+    }
 
     [[nodiscard]] BitBoard getPinBitBoard(Side kingSide, BoardPosition kingPosition) const;
 
@@ -149,6 +154,12 @@ class GameState {
     [[nodiscard]] ColoredPiece& getPieceOnSquare(BoardPosition position) {
         return pieceOnSquare_[(int)position];
     }
+
+    [[nodiscard]] BitBoard& getSideOccupancy(const Side side) { return occupancy_[(int)side]; }
+
+    [[nodiscard]] BitBoard& getOwnOccupancy() { return getSideOccupancy(sideToMove_); }
+
+    [[nodiscard]] BitBoard& getEnemyOccupancy() { return getSideOccupancy(nextSide(sideToMove_)); }
 
     [[nodiscard]] bool enPassantWillPutUsInCheck() const;
 
@@ -182,7 +193,7 @@ class GameState {
 
     PieceBitBoards pieceBitBoards_ = {};
 
-    PieceOccupancyBitBoards occupancy_ = {};
+    std::array<BitBoard, kNumSides> occupancy_ = {};
 
     HashT boardHash_ = 0;
 

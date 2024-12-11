@@ -190,9 +190,7 @@ FORCE_INLINE void updateForVirtualKingMobility(
         const BoardPosition kingPosition,
         TaperedEvaluation<CalcJacobians>& eval) {
 
-    const BitBoard ownOccupancy = side == gameState.getSideToMove()
-                                        ? gameState.getOccupancy().ownPiece
-                                        : gameState.getOccupancy().enemyPiece;
+    const BitBoard ownOccupancy = gameState.getSideOccupancy(side);
 
     // Consider all of our own pieces as blockers, but for the enemy pieces we only consider pawns.
     // This is to account for the fact that the other enemy pieces are likely mobile and so should
@@ -336,12 +334,9 @@ void evaluatePiecePositionsForSide(
     const BitBoard enemyPawns = gameState.getPieceBitBoard(nextSide(side), Piece::Pawn);
     const BitBoard anyPawn    = ownPawns | enemyPawns;
 
-    const BitBoard ownOccupancy = side == gameState.getSideToMove()
-                                        ? gameState.getOccupancy().ownPiece
-                                        : gameState.getOccupancy().enemyPiece;
+    const BitBoard ownOccupancy = gameState.getSideOccupancy(side);
 
-    const BitBoard anyPiece =
-            gameState.getOccupancy().ownPiece | gameState.getOccupancy().enemyPiece;
+    const BitBoard anyPiece = gameState.getAnyOccupancy();
 
     const int numOwnPawns = popCount(ownPawns);
 

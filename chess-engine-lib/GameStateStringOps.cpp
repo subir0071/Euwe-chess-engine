@@ -238,14 +238,13 @@ void enPassantTargetToFen(BoardPosition enPassantTarget, std::ostream& out) {
     }
 }
 
-GameState::PieceOccupancyBitBoards getPieceOccupancyBitBoards(
-        BoardConfigurationInfo configuration, const Side ownSide) {
-    GameState::PieceOccupancyBitBoards occupancy{};
+std::array<BitBoard, kNumSides> getPieceOccupancyBitBoards(BoardConfigurationInfo configuration) {
+    std::array<BitBoard, kNumSides> occupancy{};
 
     for (int piece = 0; piece < kNumPieceTypes; ++piece) {
-        occupancy.ownPiece = occupancy.ownPiece | configuration.pieceBitBoards[(int)ownSide][piece];
-        occupancy.enemyPiece =
-                occupancy.enemyPiece | configuration.pieceBitBoards[(int)nextSide(ownSide)][piece];
+        for (int sideIdx = 0; sideIdx < kNumSides; ++sideIdx) {
+            occupancy[sideIdx] |= configuration.pieceBitBoards[sideIdx][piece];
+        }
     }
 
     return occupancy;
@@ -335,7 +334,7 @@ GameState GameState::fromFen(std::string_view fenString) {
                 std::string_view(strIt, endIt)));
     }
 
-    gameState.occupancy_ = getPieceOccupancyBitBoards(boardConfig, gameState.sideToMove_);
+    gameState.occupancy_ = getPieceOccupancyBitBoards(boardConfig);
 
     gameState.boardHash_ = computeBoardHash(gameState);
 

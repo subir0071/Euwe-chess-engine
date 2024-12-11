@@ -100,7 +100,7 @@ namespace {
         const GameState& gameState, const Move& move) {
     const BoardPosition targetSquare = move.to;
 
-    BitBoard anyPiece = gameState.getOccupancy().ownPiece | gameState.getOccupancy().enemyPiece;
+    BitBoard anyPiece = gameState.getAnyOccupancy();
 
     Piece targetPiece = getPiece(gameState.getPieceOnSquare(move.to));
 
