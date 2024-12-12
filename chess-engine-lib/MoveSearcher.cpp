@@ -215,8 +215,8 @@ namespace {
     }
 
     // Late Move Reduction (LMR)
-    static constexpr int kMovesForLMR = 4;
-    if (moveIdx >= kMovesForLMR) {
+    static constexpr int kMovesForLmr = 4;
+    if (moveIdx >= kMovesForLmr) {
         return 1;
     }
 
@@ -598,9 +598,15 @@ EvalT MoveSearcher::Impl::search(
     while (const auto maybeMove = moveOrderer.getNextBestMove(gameState)) {
         const Move move = *maybeMove;
 
+        const int reduction = getDepthReduction(
+                move, movesSearched, moveOrderer.lastMoveWasLosing(), isPvNode, depth, extension);
+
         // Futility pruning
-        static constexpr EvalT futilityMarginPerDepth = 140;
-        const int futilityValue                       = staticEval + futilityMarginPerDepth * depth;
+        static constexpr EvalT futilityMarginPerDepth        = 140;
+        static constexpr EvalT futilityMarginPerMoveSearched = 20;
+        const EvalT futilityMargin = futilityMarginPerDepth * (depth - reduction)
+                                   - futilityMarginPerMoveSearched * movesSearched;
+        const EvalT futilityValue = staticEval + max(futilityMargin, (EvalT)0);
         if (futilityPruningEnabled && futilityValue <= alpha && !isCapture(move.flags)) {
             if (!gameState.givesCheck(move)) {
                 if (futilityValue > bestScore) {
@@ -610,9 +616,6 @@ EvalT MoveSearcher::Impl::search(
                 continue;
             }
         }
-
-        const int reduction = getDepthReduction(
-                move, movesSearched, moveOrderer.lastMoveWasLosing(), isPvNode, depth, extension);
 
         const auto outcome = searchMove(
                 gameState,
