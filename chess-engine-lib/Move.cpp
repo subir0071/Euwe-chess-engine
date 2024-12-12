@@ -11,14 +11,14 @@ namespace {
 [[nodiscard]] std::string algebraicFromPawnMove(const Move& move) {
     std::string result = "";
 
-    if (isCapture(move.flags)) {
+    if (isCapture(move)) {
         result += (char)('a' + fileFromPosition(move.from));
         result += 'x';
     }
     result += algebraicFromPosition(move.to);
 
     if (isPromotion(move.flags)) {
-        result += "=" + pieceToString(getPromotionPiece(move.flags));
+        result += "=" + pieceToString(getPromotionPiece(move));
     }
 
     return result;
@@ -73,7 +73,7 @@ namespace {
         }
     }
 
-    if (isCapture(move.flags)) {
+    if (isCapture(move)) {
         result += 'x';
     }
 
@@ -204,8 +204,8 @@ void doBasicSanityChecks(const Move& move, const GameState& gameState) {
         throw std::invalid_argument("Piece to move is of the wrong side.");
     }
 
-    if (isCapture(move.flags)) {
-        if (isEnPassant(move.flags)) {
+    if (isCapture(move)) {
+        if (isEnPassant(move)) {
             if (move.pieceToMove != Piece::Pawn) [[unlikely]] {
                 throw std::invalid_argument("Only pawns can capture en passant.");
             }
@@ -215,7 +215,7 @@ void doBasicSanityChecks(const Move& move, const GameState& gameState) {
         }
 
         const BoardPosition captureTarget =
-                isEnPassant(move.flags) ? getEnPassantPiecePosition(move.to, sideToMove) : move.to;
+                isEnPassant(move) ? getEnPassantPiecePosition(move.to, sideToMove) : move.to;
 
         const ColoredPiece capturedPiece = gameState.getPieceOnSquare(captureTarget);
         if (getPiece(capturedPiece) == Piece::Invalid) [[unlikely]] {
@@ -233,7 +233,7 @@ void doBasicSanityChecks(const Move& move, const GameState& gameState) {
         }
     }
 
-    if (isPromotion(move.flags)) {
+    if (isPromotion(move)) {
         if (move.pieceToMove != Piece::Pawn) [[unlikely]] {
             throw std::invalid_argument("Only pawns can be promoted.");
         }

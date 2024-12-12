@@ -55,10 +55,10 @@ void updateStatistics(
         const StackVector<Move>& moves, const GameState& gameState, MoveStatistics& statistics) {
     statistics.numMoves += moves.size();
     for (const Move move : moves) {
-        statistics.numCaptures += isCapture(move.flags);
-        statistics.numEnPassant += isEnPassant(move.flags);
-        statistics.numCastle += isCastle(move.flags);
-        statistics.numPromotions += isPromotion(move.flags);
+        statistics.numCaptures += isCapture(move);
+        statistics.numEnPassant += isEnPassant(move);
+        statistics.numCastle += isCastle(move);
+        statistics.numPromotions += isPromotion(move);
 
         if (gameState.givesCheck(move)) {
             statistics.numChecks++;

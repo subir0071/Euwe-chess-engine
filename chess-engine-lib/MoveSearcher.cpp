@@ -208,8 +208,8 @@ namespace {
 
     if (!moveIsLosing) {
         // Don't apply reductions to tactical moves with positive SEE.
-        const Piece promotionPiece = getPromotionPiece(move.flags);
-        if (isCapture(move.flags) || promotionPiece == Piece::Queen) {
+        const Piece promotionPiece = getPromotionPiece(move);
+        if (isCapture(move) || promotionPiece == Piece::Queen) {
             return 0;
         }
     }
@@ -607,7 +607,7 @@ EvalT MoveSearcher::Impl::search(
         const EvalT futilityMargin = futilityMarginPerDepth * (depth - reduction)
                                    - futilityMarginPerMoveSearched * movesSearched;
         const EvalT futilityValue = staticEval + max(futilityMargin, (EvalT)0);
-        if (futilityPruningEnabled && futilityValue <= alpha && !isCapture(move.flags)) {
+        if (futilityPruningEnabled && futilityValue <= alpha && !isCapture(move)) {
             if (!gameState.givesCheck(move)) {
                 if (futilityValue > bestScore) {
                     bestScore = futilityValue;
@@ -874,7 +874,7 @@ EvalT MoveSearcher::Impl::quiesce(
         if (!isInCheck) {
             // Delta pruning
 
-            MY_ASSERT(isCapture(move.flags));
+            MY_ASSERT(isCapture(move));
 
             // Let deltaPruningScore = standPat + SEE + kDeltaPruningThreshold
             // if deltaPruningScore < alpha, we can prune the move if it doesn't give check

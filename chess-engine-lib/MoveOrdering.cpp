@@ -250,7 +250,7 @@ FORCE_INLINE void MoveOrderer::partitionTacticalMoves() {
     MY_ASSERT(state_ == State::Init);
 
     const auto isTactical = [](const Move& move) {
-        return isCapture(move.flags) || getPromotionPiece(move.flags) == Piece::Queen;
+        return isCaptureOrQueenPromo(move);
     };
 
     // Partition moves into tactical and quiet moves using Hoare's partitioning scheme.
@@ -453,7 +453,7 @@ FORCE_INLINE const MoveScorer::KillerMoves& MoveScorer::getKillerMoves(const int
 }
 
 FORCE_INLINE void MoveScorer::storeKillerMove(const Move& move, const int ply) {
-    if (isCapture(move.flags) || isPromotion(move.flags)) {
+    if (isCapture(move) || isPromotion(move.flags)) {
         // Only store 'quiet' moves as killer moves.
         return;
     }
@@ -505,7 +505,7 @@ FORCE_INLINE void MoveScorer::updateHistoryForNonCutoff(
 
 FORCE_INLINE void MoveScorer::updateHistory(
         const Move& move, const Side side, const HistoryValueT update) {
-    if (isCapture(move.flags) || isPromotion(move.flags)) {
+    if (isCapture(move) || isPromotion(move.flags)) {
         // Only update history for 'quiet' moves.
         return;
     }
@@ -584,17 +584,17 @@ StackVector<MoveEvalT> MoveScorer::scoreMoves(
 
         moveScore += historyForSide[(int)move.pieceToMove][(int)move.to];
 
-        if (isCapture(move.flags)) {
+        if (isCapture(move)) {
             moveScore += scoreCapture(evaluator_, move, gameState);
         }
 
         // If promoting to a queen is not a good move, promoting to a knight, bishop, or rook is
         // probably even worse. So only give an ordering bonus for promoting to a queen.
-        if (getPromotionPiece(move.flags) == Piece::Queen) {
+        if (isQueenPromotion(move)) {
             moveScore += scoreQueenPromotion(move, gameState);
         }
 
-        if (!isCapture(move.flags) && !isPromotion(move.flags)) {
+        if (!isCapture(move) && !isPromotion(move.flags)) {
             for (const Move& killerMove : killerMoves) {
                 if (move == killerMove) {
                     moveScore += kKillerMoveBonus;
@@ -631,13 +631,13 @@ StackVector<MoveEvalT> MoveScorer::scoreMovesQuiesce(
         moveScore += evaluator_.getPieceSquareValue(
                 move.pieceToMove, move.to, gameState.getSideToMove());
 
-        if (isCapture(move.flags)) {
+        if (isCapture(move)) {
             moveScore += scoreCapture(evaluator_, move, gameState);
         }
 
         // If promoting to a queen is not a good move, promoting to a knight, bishop, or rook is
         // probably even worse. So only give an ordering bonus for promoting to a queen.
-        if (getPromotionPiece(move.flags) == Piece::Queen) {
+        if (isQueenPromotion(move)) {
             moveScore += scoreQueenPromotion(move, gameState);
         }
 

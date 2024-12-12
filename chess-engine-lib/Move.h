@@ -27,23 +27,31 @@ enum class MoveFlags : std::uint8_t {
     return (static_cast<int>(lhs) & static_cast<int>(rhs)) != 0;
 }
 
-[[nodiscard]] constexpr Piece getPromotionPiece(MoveFlags flags) {
+[[nodiscard]] constexpr Piece getPromotionPiece(const MoveFlags flags) {
     return static_cast<Piece>((int)flags & 7);
 }
 
-[[nodiscard]] constexpr bool isPromotion(MoveFlags flags) {
+[[nodiscard]] constexpr bool isPromotion(const MoveFlags flags) {
     return getPromotionPiece(flags) != Piece::Pawn;
 }
 
-[[nodiscard]] constexpr bool isCapture(MoveFlags flags) {
+[[nodiscard]] constexpr bool isQueenPromotion(const MoveFlags flags) {
+    return getPromotionPiece(flags) == Piece::Queen;
+}
+
+[[nodiscard]] constexpr bool isCapture(const MoveFlags flags) {
     return flags & MoveFlags::IsCapture;
 }
 
-[[nodiscard]] constexpr bool isEnPassant(MoveFlags flags) {
+[[nodiscard]] constexpr bool isCaptureOrQueenPromo(const MoveFlags flags) {
+    return isCapture(flags) || isQueenPromotion(flags);
+}
+
+[[nodiscard]] constexpr bool isEnPassant(const MoveFlags flags) {
     return flags & MoveFlags::IsEnPassant;
 }
 
-[[nodiscard]] constexpr bool isCastle(MoveFlags flags) {
+[[nodiscard]] constexpr bool isCastle(const MoveFlags flags) {
     return flags & MoveFlags::IsCastle;
 }
 
@@ -75,3 +83,31 @@ struct Move {
 };
 
 void doBasicSanityChecks(const Move& move, const GameState& gameState);
+
+[[nodiscard]] constexpr Piece getPromotionPiece(const Move& move) {
+    return getPromotionPiece(move.flags);
+}
+
+[[nodiscard]] constexpr bool isPromotion(const Move& move) {
+    return isPromotion(move.flags);
+}
+
+[[nodiscard]] constexpr bool isQueenPromotion(const Move& move) {
+    return isQueenPromotion(move.flags);
+}
+
+[[nodiscard]] constexpr bool isCapture(const Move& move) {
+    return isCapture(move.flags);
+}
+
+[[nodiscard]] constexpr bool isCaptureOrQueenPromo(const Move& move) {
+    return isCaptureOrQueenPromo(move.flags);
+}
+
+[[nodiscard]] constexpr bool isEnPassant(const Move& move) {
+    return isEnPassant(move.flags);
+}
+
+[[nodiscard]] constexpr bool isCastle(const Move& move) {
+    return isCastle(move.flags);
+}

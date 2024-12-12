@@ -468,7 +468,7 @@ GameState::UnmakeMoveInfo GameState::makeMove(const Move& move) {
 
     ++halfMoveClock_;
 
-    const bool isIrreversible = isCapture(move.flags) || move.pieceToMove == Piece::Pawn
+    const bool isIrreversible = isCapture(move) || move.pieceToMove == Piece::Pawn
                              || unmakeInfo.castlingRights != castlingRights_;
 
     if (isIrreversible) {
@@ -652,7 +652,7 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
     BoardPosition captureTargetSquare = move.to;
 
     if (isEnPassant(move.flags)) {
-        MY_ASSERT(isCapture(move.flags));
+        MY_ASSERT(isCapture(move));
         MY_ASSERT(move.to == enPassantTarget_);
 
         const auto [fromFile, fromRank] = fileRankFromPosition(move.from);
@@ -671,7 +671,7 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
     ownOccupancy &= ~move.from;
     ownOccupancy |= move.to;
 
-    if (isCapture(move.flags)) {
+    if (isCapture(move)) {
         getEnemyOccupancy() &= ~captureTargetSquare;
 
         capturedPiece = getPiece(getPieceOnSquare(captureTargetSquare));
@@ -695,9 +695,9 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
     MY_ASSERT(getSide(getPieceOnSquare(move.from)) == sideToMove_);
 
     MY_ASSERT(IMPLIES(
-            isCapture(move.flags), getPieceOnSquare(captureTargetSquare) != ColoredPiece::Invalid));
+            isCapture(move), getPieceOnSquare(captureTargetSquare) != ColoredPiece::Invalid));
     MY_ASSERT(
-            IMPLIES(isCapture(move.flags),
+            IMPLIES(isCapture(move),
                     getSide(getPieceOnSquare(captureTargetSquare)) == nextSide(sideToMove_)));
 
     getPieceOnSquare(move.to)   = getPieceOnSquare(move.from);
@@ -718,7 +718,7 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
         updateRookCastlingRights(move.from, sideToMove_);
     }
 
-    if (isCapture(move.flags) || move.pieceToMove == Piece::Pawn) {
+    if (isCapture(move) || move.pieceToMove == Piece::Pawn) {
         plySinceCaptureOrPawn_ = 0;
     } else {
         ++plySinceCaptureOrPawn_;
@@ -743,13 +743,13 @@ void GameState::unmakeSinglePieceMove(const Move& move, const UnmakeMoveInfo& un
     // Can't use getPieceOnSquare(move.to) here because that fails when undoing a promotion.
     getPieceOnSquare(move.from) = getColoredPiece(move.pieceToMove, sideToMove_);
 
-    const Piece promotionPiece = getPromotionPiece(move.flags);
+    const Piece promotionPiece = getPromotionPiece(move);
     if (promotionPiece != Piece::Pawn) {
         BitBoard& promotionBitBoard = getPieceBitBoard(sideToMove_, promotionPiece);
         promotionBitBoard &= ~move.to;
     }
 
-    if (isCapture(move.flags)) {
+    if (isCapture(move)) {
         MY_ASSERT(unmakeMoveInfo.capturedPiece != Piece::Invalid);
 
         BoardPosition captureTarget = move.to;
@@ -776,7 +776,7 @@ void GameState::unmakeSinglePieceMove(const Move& move, const UnmakeMoveInfo& un
 }
 
 void GameState::handlePawnMove(const Move& move) {
-    const Piece promotionPiece = getPromotionPiece(move.flags);
+    const Piece promotionPiece = getPromotionPiece(move);
     if (promotionPiece != Piece::Pawn) {
         BitBoard& pawnBitBoard           = getPieceBitBoard(sideToMove_, Piece::Pawn);
         BitBoard& promotionPieceBitBoard = getPieceBitBoard(sideToMove_, promotionPiece);
@@ -1013,8 +1013,7 @@ bool GameState::givesCheck(const Move& move) const {
     const BitBoard enemyKingBitBoard = getPieceBitBoard(nextSide(sideToMove_), Piece::King);
     const BitBoard occupied          = getAnyOccupancy();
 
-    const Piece movedPiece =
-            isPromotion(move.flags) ? getPromotionPiece(move.flags) : move.pieceToMove;
+    const Piece movedPiece = isPromotion(move.flags) ? getPromotionPiece(move) : move.pieceToMove;
 
     BitBoard occupancyAfterMove = occupied & ~move.from | move.to;
     if (isEnPassant(move.flags)) {
