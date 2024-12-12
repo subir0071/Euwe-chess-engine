@@ -441,7 +441,7 @@ EvalT MoveSearcher::Impl::search(
 
     const bool boundsAreMate = isMate(alpha) || isMate(beta);
 
-    constexpr int kMaxFutilityPruningDepth = 3;
+    constexpr int kMaxFutilityPruningDepth = 5;
     const bool futilityPruningEnabled      = depth <= kMaxFutilityPruningDepth && !boundsAreMate;
 
     constexpr int kMaxReverseFutilityPruningDepth = 5;
