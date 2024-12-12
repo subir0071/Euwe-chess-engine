@@ -607,7 +607,7 @@ EvalT MoveSearcher::Impl::search(
         const EvalT futilityMargin = futilityMarginPerDepth * (depth - reduction)
                                    - futilityMarginPerMoveSearched * movesSearched;
         const EvalT futilityValue = staticEval + max(futilityMargin, (EvalT)0);
-        if (futilityPruningEnabled && futilityValue <= alpha && !isCapture(move)) {
+        if (futilityPruningEnabled && futilityValue <= alpha && !isCaptureOrQueenPromo(move)) {
             if (!gameState.givesCheck(move)) {
                 if (futilityValue > bestScore) {
                     bestScore = futilityValue;
