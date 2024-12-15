@@ -157,7 +157,7 @@ void UciFrontEnd::Impl::run() {
     writeUci("uciok");
     std::flush(out_);
 
-    while (true) {
+    while (in_.good()) {
         std::string inputLine;
         std::getline(in_, inputLine);
 
