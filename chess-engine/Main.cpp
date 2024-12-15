@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "capture-history-tweak");
+            UciFrontEnd uciFrontEnd(engine, "futility-eval-ttable");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

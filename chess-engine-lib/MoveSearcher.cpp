@@ -452,6 +452,7 @@ EvalT MoveSearcher::Impl::search(
     if (futilityPruningEnabled || reverseFutilityPruningEnabled) {
         staticEval = evaluator_.evaluate(gameState);
     }
+    EvalT eval = staticEval;
 
     if (reverseFutilityPruningEnabled) {
         static constexpr EvalT futilityMarginPerDepth = 140;
@@ -542,6 +543,15 @@ EvalT MoveSearcher::Impl::search(
             }
         }
 
+        // Use TT value as a more accurate eval than static eval (for futility pruning)
+        if (ttInfo.scoreType == ScoreType::Exact) {
+            eval = ttInfo.score;
+        } else if (ttInfo.scoreType == ScoreType::LowerBound) {
+            eval = max(eval, ttInfo.score);
+        } else if (ttInfo.scoreType == UpperBound) {
+            eval = min(eval, ttInfo.score);
+        }
+
         hashMove = getTTableMove(ttInfo, gameState);
 
         // Try hash move first.
@@ -606,7 +616,7 @@ EvalT MoveSearcher::Impl::search(
         static constexpr EvalT futilityMarginPerMoveSearched = 20;
         const EvalT futilityMargin = futilityMarginPerDepth * (depth - reduction)
                                    - futilityMarginPerMoveSearched * movesSearched;
-        const EvalT futilityValue = staticEval + max(futilityMargin, (EvalT)0);
+        const EvalT futilityValue = eval + max(futilityMargin, (EvalT)0);
         if (futilityPruningEnabled && futilityValue <= alpha && !isCaptureOrQueenPromo(move)) {
             if (!gameState.givesCheck(move)) {
                 if (futilityValue > bestScore) {
