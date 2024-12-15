@@ -37,33 +37,6 @@ static_assert(kMaxCounterMoveScore < kMinKillerMoveScore);
 static_assert(kMaxHistory < kMinCounterMoveScore);
 
 [[nodiscard]] FORCE_INLINE MoveEvalT
-scoreCapture(const Evaluator& evaluator, const Move& move, const GameState& gameState) {
-    MoveEvalT moveScore = kCaptureBonus;
-
-    Piece capturedPiece;
-    BoardPosition captureTarget = move.to;
-    if (isEnPassant(move.flags)) {
-        capturedPiece = Piece::Pawn;
-        captureTarget = gameState.getEnPassantTarget();
-    } else {
-        capturedPiece = getPiece(gameState.getPieceOnSquare(move.to));
-    }
-
-    // Most valuable victim, least valuable aggressor (MVV-LVA), but disfavoring captures
-    // with the king.
-    // We achieve this by adding the value of the victim, and then subtracting the value of
-    // the aggressor, but divided by a large enough factor so that the victim's value
-    // dominates for all but the king.
-    moveScore += getStaticPieceValue(capturedPiece);
-    moveScore -= (getStaticPieceValue(move.pieceToMove) >> 5);
-
-    moveScore += evaluator.getPieceSquareValue(
-            capturedPiece, captureTarget, nextSide(gameState.getSideToMove()));
-
-    return moveScore;
-}
-
-[[nodiscard]] FORCE_INLINE MoveEvalT
 scoreQueenPromotion(const Move& move, const GameState& gameState) {
     MoveEvalT moveScore = kPromotionBonus;
 
@@ -294,8 +267,12 @@ MoveScorer::MoveScorer(const Evaluator& evaluator) : evaluator_(evaluator) {
 }
 
 FORCE_INLINE void MoveScorer::reportNonCutoff(
-        const Move& move, const MoveType moveType, const int depth, const Side side) {
-    updateHistoryForNonCutoff(move, depth, side);
+        const Move& move, const GameState& gameState, const MoveType moveType, const int depth) {
+    if (isCapture(move)) {
+        updateCaptureHistoryForNonCutoff(move, gameState, depth);
+    } else if (!isPromotion(move)) {
+        updateMainHistoryForNonCutoff(move, depth, gameState.getSideToMove());
+    }
 
 #ifdef TRACK_CUTOFF_STATISTICS
     ++numSearchedByMoveType_[(int)moveType];
@@ -304,14 +281,18 @@ FORCE_INLINE void MoveScorer::reportNonCutoff(
 
 FORCE_INLINE void MoveScorer::reportCutoff(
         const Move& move,
+        const GameState& gameState,
         const MoveType moveType,
         const Move& lastMove,
         const int ply,
-        const int depth,
-        const Side side) {
-    storeKillerMove(move, ply);
-    storeCounterMove(lastMove, move, side);
-    updateHistoryForCutoff(move, depth, side);
+        const int depth) {
+    if (isCapture(move)) {
+        updateCaptureHistoryForCutoff(move, gameState, depth);
+    } else if (!isPromotion(move)) {
+        storeKillerMove(move, ply);
+        storeCounterMove(lastMove, move, gameState.getSideToMove());
+        updateMainHistoryForCutoff(move, depth, gameState.getSideToMove());
+    }
 
 #ifdef TRACK_CUTOFF_STATISTICS
     ++numSearchedByMoveType_[(int)moveType];
@@ -355,6 +336,7 @@ void MoveScorer::newGame() {
     counterMoves_            = {};
 
     initializeHistoryFromPieceSquare();
+    initializeCaptureHistory();
 }
 
 void MoveScorer::prepareForNewSearch(const GameState& gameState) {
@@ -453,11 +435,6 @@ FORCE_INLINE const MoveScorer::KillerMoves& MoveScorer::getKillerMoves(const int
 }
 
 FORCE_INLINE void MoveScorer::storeKillerMove(const Move& move, const int ply) {
-    if (isCapture(move) || isPromotion(move.flags)) {
-        // Only store 'quiet' moves as killer moves.
-        return;
-    }
-
     auto& plyKillerMoves = getKillerMoves(ply);
 
     if (move == plyKillerMoves[0]) {
@@ -479,10 +456,6 @@ FORCE_INLINE Move MoveScorer::getCounterMove(const Move& move, const Side side) 
 
 FORCE_INLINE void MoveScorer::storeCounterMove(
         const Move& lastMove, const Move& counter, const Side side) {
-    if (isCapture(counter.flags) || isPromotion(counter.flags)) {
-        // Only store 'quiet' moves as counter moves.
-        return;
-    }
     if (lastMove.pieceToMove == Piece::Invalid) {
         return;
     }
@@ -493,35 +466,55 @@ FORCE_INLINE int MoveScorer::getHistoryWeight(const int depth) {
     return depth * depth;
 }
 
-FORCE_INLINE void MoveScorer::updateHistoryForCutoff(
+FORCE_INLINE void MoveScorer::updateMainHistoryForCutoff(
         const Move& move, const int depth, const Side side) {
-    updateHistory(move, side, getHistoryWeight(depth));
+    updateMainHistory(move, side, getHistoryWeight(depth));
 }
 
-FORCE_INLINE void MoveScorer::updateHistoryForNonCutoff(
+FORCE_INLINE void MoveScorer::updateMainHistoryForNonCutoff(
         const Move& move, const int depth, const Side side) {
-    updateHistory(move, side, -getHistoryWeight(depth));
+    updateMainHistory(move, side, -getHistoryWeight(depth));
 }
 
-FORCE_INLINE void MoveScorer::updateHistory(
+FORCE_INLINE void MoveScorer::updateMainHistory(
         const Move& move, const Side side, const HistoryValueT update) {
-    if (isCapture(move) || isPromotion(move.flags)) {
-        // Only update history for 'quiet' moves.
-        return;
-    }
-
-    // History with 'gravity'.
-
-    const HistoryValueT clampedUpdate = clamp(update, -kMaxHistory, kMaxHistory);
 
     const int square = (int)move.to;
     const int piece  = (int)move.pieceToMove;
 
-    HistoryValueT& value = history_[(int)side][piece][square];
+    updateHistory(history_[(int)side][piece][square], update);
+}
 
-    value += clampedUpdate - value * constexprAbs(clampedUpdate) / kMaxHistory;
+FORCE_INLINE void MoveScorer::updateCaptureHistoryForCutoff(
+        const Move& move, const GameState& gameState, int depth) {
+    updateCaptureHistory(move, gameState, getHistoryWeight(depth));
+}
 
-    MY_ASSERT(constexprAbs(value) <= kMaxHistory);
+FORCE_INLINE void MoveScorer::updateCaptureHistoryForNonCutoff(
+        const Move& move, const GameState& gameState, int depth) {
+    updateCaptureHistory(move, gameState, -getHistoryWeight(depth));
+}
+
+FORCE_INLINE void MoveScorer::updateCaptureHistory(
+        const Move& move, const GameState& gameState, const HistoryValueT update) {
+    MY_ASSERT(isCapture(move));
+
+    const int side          = (int)gameState.getSideToMove();
+    const int piece         = (int)move.pieceToMove;
+    const int capturedPiece = (int)getPiece(gameState.getPieceOnSquare(move.to));
+    const int square        = (int)move.to;
+
+    updateHistory(captureHistory_[side][piece][capturedPiece][square], update);
+}
+
+FORCE_INLINE void MoveScorer::updateHistory(HistoryValueT& history, const HistoryValueT update) {
+    // History with 'gravity'.
+
+    const HistoryValueT clampedUpdate = clamp(update, -kMaxHistory, kMaxHistory);
+
+    history += clampedUpdate - history * constexprAbs(clampedUpdate) / kMaxHistory;
+
+    MY_ASSERT(constexprAbs(history) <= kMaxHistory);
 }
 
 void MoveScorer::shiftKillerMoves(const int halfMoveClock) {
@@ -543,6 +536,24 @@ void MoveScorer::initializeHistoryFromPieceSquare() {
                 const int historyValue = clamp(pieceSquareValue, -kMaxHistory, kMaxHistory);
 
                 history_[side][piece][square] = historyValue;
+            }
+        }
+    }
+}
+
+void MoveScorer::initializeCaptureHistory() {
+    for (int side = 0; side < kNumSides; ++side) {
+        for (int capturingPiece = 0; capturingPiece < kNumPieceTypes; ++capturingPiece) {
+            for (int capturedPiece = 0; capturedPiece < kNumPieceTypes - 1; ++capturedPiece) {
+                for (int square = 0; square < kSquares; ++square) {
+                    const int pieceSquareValue = evaluator_.getPieceSquareValue(
+                            (Piece)capturedPiece, (BoardPosition)square, nextSide((Side)side));
+                    const int capturingPieceValue = getStaticPieceValue((Piece)capturingPiece);
+                    const int historyValue        = clamp(
+                            pieceSquareValue - capturingPieceValue, -kMaxHistory, kMaxHistory);
+
+                    captureHistory_[side][capturingPiece][capturedPiece][square] = historyValue;
+                }
             }
         }
     }
@@ -582,10 +593,10 @@ StackVector<MoveEvalT> MoveScorer::scoreMoves(
 
         MoveEvalT moveScore = 0;
 
-        moveScore += historyForSide[(int)move.pieceToMove][(int)move.to];
-
         if (isCapture(move)) {
-            moveScore += scoreCapture(evaluator_, move, gameState);
+            moveScore += scoreCapture(move, gameState);
+        } else {
+            moveScore += historyForSide[(int)move.pieceToMove][(int)move.to];
         }
 
         // If promoting to a queen is not a good move, promoting to a knight, bishop, or rook is
@@ -632,7 +643,7 @@ StackVector<MoveEvalT> MoveScorer::scoreMovesQuiesce(
                 move.pieceToMove, move.to, gameState.getSideToMove());
 
         if (isCapture(move)) {
-            moveScore += scoreCapture(evaluator_, move, gameState);
+            moveScore += scoreCapture(move, gameState);
         }
 
         // If promoting to a queen is not a good move, promoting to a knight, bishop, or rook is
@@ -646,4 +657,27 @@ StackVector<MoveEvalT> MoveScorer::scoreMovesQuiesce(
 
     scores.lock();
     return scores;
+}
+
+FORCE_INLINE MoveEvalT
+MoveScorer::scoreCapture(const Move& move, const GameState& gameState) const {
+    MoveEvalT moveScore = kCaptureBonus;
+
+    Piece capturedPiece;
+    BoardPosition captureTarget = move.to;
+    if (isEnPassant(move.flags)) {
+        capturedPiece = Piece::Pawn;
+        captureTarget = gameState.getEnPassantTarget();
+    } else {
+        capturedPiece = getPiece(gameState.getPieceOnSquare(move.to));
+    }
+
+    // Most valuable victim (MVV).
+    moveScore += getStaticPieceValue(capturedPiece);
+
+    // Use capture history instead of least valuable attacker (LVA).
+    moveScore += captureHistory_[(int)gameState.getSideToMove()][(int)move.pieceToMove]
+                                [(int)capturedPiece][(int)captureTarget];
+
+    return moveScore;
 }

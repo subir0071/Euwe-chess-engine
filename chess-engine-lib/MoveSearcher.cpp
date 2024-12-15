@@ -1027,8 +1027,7 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
         bestMove  = move;
 
         if (bestScore >= beta) {
-            moveScorer_.reportCutoff(
-                    move, moveType, lastMove, ply, depth, gameState.getSideToMove());
+            moveScorer_.reportCutoff(move, gameState, moveType, lastMove, ply, depth);
 
             // Fail high; score is a lower bound.
             return SearchMoveOutcome::Cutoff;
@@ -1038,7 +1037,7 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
         // the lower bound of our feasibility window.
         alpha = max(alpha, bestScore);
     }
-    moveScorer_.reportNonCutoff(move, moveType, depth, gameState.getSideToMove());
+    moveScorer_.reportNonCutoff(move, gameState, moveType, depth);
 
     return SearchMoveOutcome::Continue;
 }

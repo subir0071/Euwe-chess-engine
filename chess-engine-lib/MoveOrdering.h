@@ -73,14 +73,15 @@ class MoveScorer {
   public:
     MoveScorer(const Evaluator& evaluator);
 
-    void reportNonCutoff(const Move& move, MoveType moveType, int depth, Side side);
+    void reportNonCutoff(
+            const Move& move, const GameState& gameState, MoveType moveType, int depth);
     void reportCutoff(
             const Move& move,
+            const GameState& gameState,
             MoveType moveType,
             const Move& lastMove,
             int ply,
-            int depth,
-            Side side);
+            int depth);
 
     [[nodiscard]] MoveOrderer scoreMoves(
             StackVector<Move>&& moves,
@@ -112,10 +113,14 @@ class MoveScorer {
     using CounterMovePerPiece = std::array<MovePerSquare, kNumPieceTypes>;
     using CounterMovePerSide  = std::array<CounterMovePerPiece, kNumSides>;
 
-    using HistoryValueT    = int;
-    using HistoryPerSquare = std::array<HistoryValueT, kSquares>;
-    using HistoryPerPiece  = std::array<HistoryPerSquare, kNumPieceTypes>;
-    using HistoryPerSide   = std::array<HistoryPerPiece, kNumSides>;
+    using HistoryValueT         = int;
+    using HistoryPerSquare      = std::array<HistoryValueT, kSquares>;
+    using HistoryPieceTo        = std::array<HistoryPerSquare, kNumPieceTypes>;
+    using HistoryPieceToPerSide = std::array<HistoryPieceTo, kNumSides>;
+
+    using HistoryCapturedPiece      = std::array<HistoryPerSquare, kNumPieceTypes - 1>;
+    using HistoryPieceCapturedPiece = std::array<HistoryCapturedPiece, kNumPieceTypes>;
+    using CaptureHistoryPerSide     = std::array<HistoryPieceCapturedPiece, kNumSides>;
 
     [[nodiscard]] KillerMoves& getKillerMoves(int ply);
     [[nodiscard]] const KillerMoves& getKillerMoves(int ply) const;
@@ -125,12 +130,20 @@ class MoveScorer {
     void storeCounterMove(const Move& lastMove, const Move& counter, Side side);
 
     [[nodiscard]] static int getHistoryWeight(int depth);
-    void updateHistoryForCutoff(const Move& move, int depth, Side side);
-    void updateHistoryForNonCutoff(const Move& move, int depth, Side side);
-    void updateHistory(const Move& move, Side side, HistoryValueT update);
+
+    void updateMainHistoryForCutoff(const Move& move, int depth, Side side);
+    void updateMainHistoryForNonCutoff(const Move& move, int depth, Side side);
+    void updateMainHistory(const Move& move, Side side, HistoryValueT update);
+
+    void updateCaptureHistoryForCutoff(const Move& move, const GameState& gameState, int depth);
+    void updateCaptureHistoryForNonCutoff(const Move& move, const GameState& gameState, int depth);
+    void updateCaptureHistory(const Move& move, const GameState& gameState, HistoryValueT update);
+
+    void updateHistory(HistoryValueT& history, HistoryValueT update);
 
     void shiftKillerMoves(int halfMoveClock);
     void initializeHistoryFromPieceSquare();
+    void initializeCaptureHistory();
 
     void ignoreMove(
             const Move& moveToIgnore,
@@ -150,6 +163,8 @@ class MoveScorer {
             const int firstMoveIdx,
             const GameState& gameState) const;
 
+    [[nodiscard]] MoveEvalT scoreCapture(const Move& move, const GameState& gameState) const;
+
     mutable StackOfVectors<MoveEvalT> moveScoreStack_ = {};
 
     int moveClockForKillerMoves_     = 0;
@@ -157,7 +172,8 @@ class MoveScorer {
 
     CounterMovePerSide counterMoves_ = {};
 
-    HistoryPerSide history_ = {};
+    HistoryPieceToPerSide history_        = {};
+    CaptureHistoryPerSide captureHistory_ = {};
 
     const Evaluator& evaluator_;
 
