@@ -546,11 +546,19 @@ void MoveScorer::initializeCaptureHistory() {
         for (int capturingPiece = 0; capturingPiece < kNumPieceTypes; ++capturingPiece) {
             for (int capturedPiece = 0; capturedPiece < kNumPieceTypes - 1; ++capturedPiece) {
                 for (int square = 0; square < kSquares; ++square) {
-                    const int pieceSquareValue = evaluator_.getPieceSquareValue(
+                    int historyValue = 0;
+
+                    // Initialize with least valuable attacker (LVA) heuristic
+                    historyValue -= getStaticPieceValue((Piece)capturingPiece) >> 5;
+
+                    // Give bonuses for how good the target square is for both the capturing and
+                    // captured piece.
+                    historyValue += evaluator_.getPieceSquareValue(
+                            (Piece)capturingPiece, (BoardPosition)square, (Side)side);
+                    historyValue += evaluator_.getPieceSquareValue(
                             (Piece)capturedPiece, (BoardPosition)square, nextSide((Side)side));
-                    const int capturingPieceValue = getStaticPieceValue((Piece)capturingPiece);
-                    const int historyValue        = clamp(
-                            pieceSquareValue - capturingPieceValue, -kMaxHistory, kMaxHistory);
+
+                    historyValue = clamp(historyValue, -kMaxHistory, kMaxHistory);
 
                     captureHistory_[side][capturingPiece][capturedPiece][square] = historyValue;
                 }
@@ -636,11 +644,6 @@ StackVector<MoveEvalT> MoveScorer::scoreMovesQuiesce(
         const Move& move = moves[moveIdx];
 
         MoveEvalT moveScore = 0;
-
-        moveScore -= evaluator_.getPieceSquareValue(
-                move.pieceToMove, move.from, gameState.getSideToMove());
-        moveScore += evaluator_.getPieceSquareValue(
-                move.pieceToMove, move.to, gameState.getSideToMove());
 
         if (isCapture(move)) {
             moveScore += scoreCapture(move, gameState);
