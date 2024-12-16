@@ -121,8 +121,8 @@ class MoveSearcher::Impl {
 
     // == Data ==
 
-    std::atomic<bool> stopSearch_ = false;
-    mutable bool wasInterrupted_  = false;
+    mutable std::atomic<bool> stopSearch_ = false;
+    mutable bool wasInterrupted_          = false;
 
     std::uint8_t tTableTick_ = 0;
 
@@ -391,8 +391,8 @@ StackVector<Move> MoveSearcher::Impl::extractPv(
 bool MoveSearcher::Impl::shouldStopSearch() const {
     const std::uint64_t numNodes =
             searchStatistics_.normalNodesSearched + searchStatistics_.qNodesSearched;
-    wasInterrupted_ =
-            wasInterrupted_ || stopSearch_ || timeManager_.shouldInterruptSearch(numNodes);
+    wasInterrupted_ = wasInterrupted_ || stopSearch_.exchange(false)
+                   || timeManager_.shouldInterruptSearch(numNodes);
     return wasInterrupted_;
 }
 
@@ -1211,7 +1211,6 @@ RootSearchResult MoveSearcher::Impl::searchForBestMove(
 
 void MoveSearcher::Impl::prepareForNewSearch(const GameState& gameState) {
     // Set state variables to prepare for search.
-    stopSearch_     = false;
     wasInterrupted_ = false;
 
     moveScorer_.prepareForNewSearch(gameState);

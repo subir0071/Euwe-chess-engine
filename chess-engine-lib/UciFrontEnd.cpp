@@ -93,6 +93,8 @@ class UciFrontEnd::Impl final : public IFrontEnd {
 
     void handleEval();
 
+    void stopSearchIfNeeded();
+
     void waitForGoToComplete();
 
     void writeOptions() const;
@@ -182,8 +184,7 @@ void UciFrontEnd::Impl::run() {
         } else if (command == "debug") {
             handleDebug(lineSStream);
         } else if (command == "quit") {
-            waitForGoToComplete();
-            return;
+            break;
         } else if (command == "register") {
             handleRegister();
         } else if (command == "setoption") {
@@ -196,6 +197,8 @@ void UciFrontEnd::Impl::run() {
             writeDebug("Warning: Ignoring unknown command: '{}'", command);
         }
     }
+
+    stopSearchIfNeeded();
 }
 
 void UciFrontEnd::Impl::reportFullSearch(
@@ -431,10 +434,7 @@ void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
 }
 
 void UciFrontEnd::Impl::handleStop() {
-    if (goFuture_.valid()) {
-        engine_.interruptSearch();
-        goFuture_.get();
-    }
+    stopSearchIfNeeded();
 }
 
 void UciFrontEnd::Impl::handleDebug(std::stringstream& lineSStream) {
@@ -545,6 +545,13 @@ void UciFrontEnd::Impl::handleEval() {
     StackOfVectors<Move> stack;
     const EvalT eval = engine_.evaluate(gameState_);
     writeDebug("Eval: {:+}", (float)eval / 100);
+}
+
+void UciFrontEnd::Impl::stopSearchIfNeeded() {
+    if (goFuture_.valid()) {
+        engine_.interruptSearch();
+        goFuture_.get();
+    }
 }
 
 void UciFrontEnd::Impl::waitForGoToComplete() {

@@ -340,7 +340,14 @@ void MoveScorer::newGame() {
 }
 
 void MoveScorer::prepareForNewSearch(const GameState& gameState) {
-    shiftKillerMoves(gameState.getHalfMoveClock());
+    const int newHalfMoveClock = gameState.getHalfMoveClock();
+    if (newHalfMoveClock < moveClockForKillerMoves_
+        || newHalfMoveClock > moveClockForKillerMoves_ + 2) {
+        newGame();
+        moveClockForKillerMoves_ = newHalfMoveClock;
+    } else if (newHalfMoveClock != moveClockForKillerMoves_) {
+        shiftKillerMoves(newHalfMoveClock);
+    }
 }
 
 void MoveScorer::resetCutoffStatistics() {
@@ -499,12 +506,19 @@ FORCE_INLINE void MoveScorer::updateCaptureHistory(
         const Move& move, const GameState& gameState, const HistoryValueT update) {
     MY_ASSERT(isCapture(move));
 
-    const int side          = (int)gameState.getSideToMove();
-    const int piece         = (int)move.pieceToMove;
-    const int capturedPiece = (int)getPiece(gameState.getPieceOnSquare(move.to));
-    const int square        = (int)move.to;
+    Piece capturedPiece;
+    BoardPosition captureTarget = move.to;
+    if (isEnPassant(move.flags)) {
+        capturedPiece = Piece::Pawn;
+        captureTarget = gameState.getEnPassantTarget();
+    } else {
+        capturedPiece = getPiece(gameState.getPieceOnSquare(move.to));
+    }
 
-    updateHistory(captureHistory_[side][piece][capturedPiece][square], update);
+    const int side  = (int)gameState.getSideToMove();
+    const int piece = (int)move.pieceToMove;
+
+    updateHistory(captureHistory_[side][piece][(int)capturedPiece][(int)captureTarget], update);
 }
 
 FORCE_INLINE void MoveScorer::updateHistory(HistoryValueT& history, const HistoryValueT update) {

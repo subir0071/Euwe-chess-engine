@@ -104,7 +104,7 @@ class MoveScorer {
 
   private:
     static constexpr std::size_t kNumKillerMoves = 2;
-    static constexpr std::size_t kMaxDepth       = 100;
+    static constexpr int kMaxDepth               = 100;
 
     using KillerMoves         = std::array<Move, kNumKillerMoves>;
     using KillerMovesPerDepth = std::array<KillerMoves, kMaxDepth>;
