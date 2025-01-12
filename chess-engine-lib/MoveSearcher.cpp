@@ -603,7 +603,8 @@ EvalT MoveSearcher::Impl::search(
         return evaluateNoLegalMoves(gameState);
     }
 
-    auto moveOrderer = moveScorer_.scoreMoves(std::move(moves), hashMove, gameState, lastMove, ply);
+    auto moveOrderer =
+            moveScorer_.getMoveOrderer(std::move(moves), hashMove, gameState, lastMove, ply);
 
     while (const auto maybeMove = moveOrderer.getNextBestMove(gameState)) {
         const Move move = *maybeMove;
@@ -876,7 +877,7 @@ EvalT MoveSearcher::Impl::quiesce(
     }
 
     // Ignore the hash move even if we didn't try it, since that would mean we pruned it.
-    auto moveOrderer = moveScorer_.scoreMovesQuiescence(std::move(moves), hashMove, gameState);
+    auto moveOrderer = moveScorer_.getMoveOrdererQuiescence(std::move(moves), hashMove, gameState);
 
     while (const auto maybeMove = moveOrderer.getNextBestMoveQuiescence()) {
         const Move move = *maybeMove;

@@ -94,8 +94,10 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& g
                     }
                 }
 
-                std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
-                std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
+                // 'destructive swap'
+                moves_[bestMoveIdx]      = moves_[currentMoveIdx_];
+                moveScores_[bestMoveIdx] = moveScores_[currentMoveIdx_];
+
                 ++currentMoveIdx_;
 
                 lastMoveType_ = MoveType::GoodTactical;
@@ -118,8 +120,10 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& g
                 const int bestScore = moveScores_[bestMoveIdx];
 #endif
 
-                std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
-                std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
+                // 'destructive swap'
+                moves_[bestMoveIdx]      = moves_[currentMoveIdx_];
+                moveScores_[bestMoveIdx] = moveScores_[currentMoveIdx_];
+
                 ++currentMoveIdx_;
 
 #ifdef TRACK_CUTOFF_STATISTICS
@@ -184,8 +188,10 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMoveQuiescence() {
 
     const Move bestMove = moves_[bestMoveIdx];
 
-    std::swap(moves_[bestMoveIdx], moves_[currentMoveIdx_]);
-    std::swap(moveScores_[bestMoveIdx], moveScores_[currentMoveIdx_]);
+    // 'destructive swap'
+    moves_[bestMoveIdx]      = moves_[currentMoveIdx_];
+    moveScores_[bestMoveIdx] = moveScores_[currentMoveIdx_];
+
     ++currentMoveIdx_;
 
     return bestMove;
@@ -298,7 +304,7 @@ FORCE_INLINE void MoveScorer::reportCutoff(
 #endif
 }
 
-FORCE_INLINE MoveOrderer MoveScorer::scoreMoves(
+FORCE_INLINE MoveOrderer MoveScorer::getMoveOrderer(
         StackVector<Move>&& moves,
         const std::optional<Move>& moveToIgnore,
         const GameState& gameState,
@@ -314,7 +320,7 @@ FORCE_INLINE MoveOrderer MoveScorer::scoreMoves(
     return MoveOrderer(std::move(moves), std::move(moveScores), moveIdx);
 }
 
-FORCE_INLINE MoveOrderer MoveScorer::scoreMovesQuiescence(
+FORCE_INLINE MoveOrderer MoveScorer::getMoveOrdererQuiescence(
         StackVector<Move>&& moves,
         const std::optional<Move>& moveToIgnore,
         const GameState& gameState) const {

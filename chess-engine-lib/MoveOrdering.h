@@ -83,14 +83,14 @@ class MoveScorer {
             int ply,
             int depth);
 
-    [[nodiscard]] MoveOrderer scoreMoves(
+    [[nodiscard]] MoveOrderer getMoveOrderer(
             StackVector<Move>&& moves,
             const std::optional<Move>& moveToIgnore,
             const GameState& gameState,
             const Move& lastMove,
             int ply) const;
 
-    [[nodiscard]] MoveOrderer scoreMovesQuiescence(
+    [[nodiscard]] MoveOrderer getMoveOrdererQuiescence(
             StackVector<Move>&& moves,
             const std::optional<Move>& moveToIgnore,
             const GameState& gameState) const;
