@@ -199,22 +199,20 @@ FORCE_INLINE MoveType MoveOrderer::getLastMoveType() const {
     return lastMoveType_;
 }
 
-FORCE_INLINE int MoveOrderer::findHighestScoringMove(int startIdx, int endIdx) const {
+FORCE_INLINE int MoveOrderer::findHighestScoringMove(const int startIdx, const int endIdx) const {
     // Select best move based on pre-calculated scores using a simple linear search.
     // If the best move is then swapped to the front, repeated calls of this function end up doing
     // a selection sort.
 
-    int bestMoveIdx         = -1;
-    MoveEvalT bestMoveScore = std::numeric_limits<MoveEvalT>::lowest();
+    int bestMoveIdx         = startIdx;
+    MoveEvalT bestMoveScore = moveScores_[startIdx];
 
-    for (int moveIdx = startIdx; moveIdx < endIdx; ++moveIdx) {
+    for (int moveIdx = startIdx + 1; moveIdx < endIdx; ++moveIdx) {
         if (moveScores_[moveIdx] > bestMoveScore) {
             bestMoveScore = moveScores_[moveIdx];
             bestMoveIdx   = moveIdx;
         }
     }
-
-    MY_ASSERT(bestMoveIdx != -1);
 
     return bestMoveIdx;
 }
