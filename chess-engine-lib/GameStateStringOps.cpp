@@ -285,6 +285,23 @@ HashT computeBoardHash(const GameState& gameState) {
     return hash;
 }
 
+HashT computePawnKingHash(const GameState& gameState) {
+    HashT hash = 0;
+
+    for (int sideIdx = 0; sideIdx < kNumSides; ++sideIdx) {
+        const Side side = (Side)sideIdx;
+        for (const Piece& piece : {Piece::Pawn, Piece::King}) {
+            BitBoard pieceBitBoard = gameState.getPieceBitBoard(side, piece);
+            while (pieceBitBoard != BitBoard::Empty) {
+                const BoardPosition position = popFirstSetPosition(pieceBitBoard);
+                updateHashForPiecePosition(side, piece, position, hash);
+            }
+        }
+    }
+
+    return hash;
+}
+
 }  // namespace
 
 GameState GameState::fromFen(std::string_view fenString) {
@@ -336,7 +353,8 @@ GameState GameState::fromFen(std::string_view fenString) {
 
     gameState.occupancy_ = getPieceOccupancyBitBoards(boardConfig);
 
-    gameState.boardHash_ = computeBoardHash(gameState);
+    gameState.boardHash_    = computeBoardHash(gameState);
+    gameState.pawnKingHash_ = computePawnKingHash(gameState);
 
     gameState.previousHashes_.reserve(500);
     gameState.previousHashes_.push_back(gameState.boardHash_);

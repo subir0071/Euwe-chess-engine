@@ -569,10 +569,14 @@ void GameState::removePiece(const BoardPosition position) {
         updateRookCastlingRights(position, pieceSide);
     }
 
-    getPieceOnSquare(position) = ColoredPiece::Invalid;
-    getPieceBitBoard(coloredPiece) &= ~position;
-    getSideOccupancy(pieceSide) &= ~position;
+    getPieceOnSquareMut(position) = ColoredPiece::Invalid;
+    getPieceBitBoardMut(coloredPiece) &= ~position;
+    getSideOccupancyMut(pieceSide) &= ~position;
     updateHashForPiecePosition(coloredPiece, position, boardHash_);
+
+    if (piece == Piece::Pawn || piece == Piece::King) {
+        updateHashForPiecePosition(coloredPiece, position, pawnKingHash_);
+    }
 }
 
 void GameState::makeCastleMove(const Move& move, const bool reverse) {
@@ -597,7 +601,7 @@ void GameState::makeCastleMove(const Move& move, const bool reverse) {
         std::swap(kingFromPosition, kingToPosition);
     }
 
-    BitBoard& ownOccupancy = getOwnOccupancy();
+    BitBoard& ownOccupancy = getOwnOccupancyMut();
 
     ownOccupancy &= ~kingFromPosition;
     ownOccupancy |= kingToPosition;
@@ -606,18 +610,21 @@ void GameState::makeCastleMove(const Move& move, const bool reverse) {
     ownOccupancy |= rookToPosition;
 
     // Update king
-    getPieceBitBoard(sideToMove_, Piece::King) = (BitBoard)(1ULL << (int)kingToPosition);
+    getPieceBitBoardMut(sideToMove_, Piece::King) = (BitBoard)(1ULL << (int)kingToPosition);
 
-    getPieceOnSquare(kingToPosition)   = getPieceOnSquare(kingFromPosition);
-    getPieceOnSquare(kingFromPosition) = ColoredPiece::Invalid;
+    getPieceOnSquareMut(kingToPosition)   = getPieceOnSquare(kingFromPosition);
+    getPieceOnSquareMut(kingFromPosition) = ColoredPiece::Invalid;
 
     // Update rook
-    BitBoard& rookBitBoard = getPieceBitBoard(sideToMove_, Piece::Rook);
+    BitBoard& rookBitBoard = getPieceBitBoardMut(sideToMove_, Piece::Rook);
     rookBitBoard &= ~rookFromPosition;
     rookBitBoard |= rookToPosition;
 
-    getPieceOnSquare(rookToPosition)   = getPieceOnSquare(rookFromPosition);
-    getPieceOnSquare(rookFromPosition) = ColoredPiece::Invalid;
+    getPieceOnSquareMut(rookToPosition)   = getPieceOnSquare(rookFromPosition);
+    getPieceOnSquareMut(rookFromPosition) = ColoredPiece::Invalid;
+
+    updateHashForPiecePosition(sideToMove_, Piece::King, kingFromPosition, pawnKingHash_);
+    updateHashForPiecePosition(sideToMove_, Piece::King, kingToPosition, pawnKingHash_);
 
     if (!reverse) {
         updateHashForPiecePosition(sideToMove_, Piece::King, kingFromPosition, boardHash_);
@@ -667,17 +674,17 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
 
     MY_ASSERT(move.from != BoardPosition::Invalid && move.to != BoardPosition::Invalid);
 
-    BitBoard& ownOccupancy = getOwnOccupancy();
+    BitBoard& ownOccupancy = getOwnOccupancyMut();
     ownOccupancy &= ~move.from;
     ownOccupancy |= move.to;
 
     if (isCapture(move)) {
-        getEnemyOccupancy() &= ~captureTargetSquare;
+        getEnemyOccupancyMut() &= ~captureTargetSquare;
 
         capturedPiece = getPiece(getPieceOnSquare(captureTargetSquare));
         MY_ASSERT(capturedPiece != Piece::Invalid);
 
-        getPieceBitBoard(nextSide(sideToMove_), capturedPiece) &= ~captureTargetSquare;
+        getPieceBitBoardMut(nextSide(sideToMove_), capturedPiece) &= ~captureTargetSquare;
 
         if (capturedPiece == Piece::Rook) {
             updateRookCastlingRights(captureTargetSquare, nextSide(sideToMove_));
@@ -685,9 +692,14 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
 
         updateHashForPiecePosition(
                 nextSide(sideToMove_), capturedPiece, captureTargetSquare, boardHash_);
+
+        if (capturedPiece == Piece::Pawn) {
+            updateHashForPiecePosition(
+                    nextSide(sideToMove_), capturedPiece, captureTargetSquare, pawnKingHash_);
+        }
     }
 
-    BitBoard& pieceBitBoard = getPieceBitBoard(sideToMove_, move.pieceToMove);
+    BitBoard& pieceBitBoard = getPieceBitBoardMut(sideToMove_, move.pieceToMove);
     pieceBitBoard &= ~move.from;
     pieceBitBoard |= move.to;
 
@@ -700,20 +712,22 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
             IMPLIES(isCapture(move),
                     getSide(getPieceOnSquare(captureTargetSquare)) == nextSide(sideToMove_)));
 
-    getPieceOnSquare(move.to)   = getPieceOnSquare(move.from);
-    getPieceOnSquare(move.from) = ColoredPiece::Invalid;
+    getPieceOnSquareMut(move.to)   = getPieceOnSquare(move.from);
+    getPieceOnSquareMut(move.from) = ColoredPiece::Invalid;
 
     updateHashForPiecePosition(sideToMove_, move.pieceToMove, move.from, boardHash_);
     updateHashForPiecePosition(sideToMove_, move.pieceToMove, move.to, boardHash_);
 
+    // pawnKingHash_ updated in handlePawnMove or handleNormalKingMove
+
     if (isEnPassant(move.flags)) {
-        getPieceOnSquare(captureTargetSquare) = ColoredPiece::Invalid;
+        getPieceOnSquareMut(captureTargetSquare) = ColoredPiece::Invalid;
     }
 
     if (move.pieceToMove == Piece::Pawn) {
         handlePawnMove(move);
     } else if (move.pieceToMove == Piece::King) {
-        handleNormalKingMove();
+        handleNormalKingMove(move);
     } else if (move.pieceToMove == Piece::Rook) {
         updateRookCastlingRights(move.from, sideToMove_);
     }
@@ -732,21 +746,26 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
 }
 
 void GameState::unmakeSinglePieceMove(const Move& move, const UnmakeMoveInfo& unmakeMoveInfo) {
-    BitBoard& ownOccupancy = getOwnOccupancy();
+    BitBoard& ownOccupancy = getOwnOccupancyMut();
     ownOccupancy |= move.from;
     ownOccupancy &= ~move.to;
 
-    BitBoard& pieceBitBoard = getPieceBitBoard(sideToMove_, move.pieceToMove);
+    BitBoard& pieceBitBoard = getPieceBitBoardMut(sideToMove_, move.pieceToMove);
     pieceBitBoard &= ~move.to;
     pieceBitBoard |= move.from;
 
     // Can't use getPieceOnSquare(move.to) here because that fails when undoing a promotion.
-    getPieceOnSquare(move.from) = getColoredPiece(move.pieceToMove, sideToMove_);
+    getPieceOnSquareMut(move.from) = getColoredPiece(move.pieceToMove, sideToMove_);
 
     const Piece promotionPiece = getPromotionPiece(move);
     if (promotionPiece != Piece::Pawn) {
-        BitBoard& promotionBitBoard = getPieceBitBoard(sideToMove_, promotionPiece);
+        BitBoard& promotionBitBoard = getPieceBitBoardMut(sideToMove_, promotionPiece);
         promotionBitBoard &= ~move.to;
+
+        updateHashForPiecePosition(sideToMove_, Piece::Pawn, move.from, pawnKingHash_);
+    } else if (move.pieceToMove == Piece::Pawn || move.pieceToMove == Piece::King) {
+        updateHashForPiecePosition(sideToMove_, move.pieceToMove, move.to, pawnKingHash_);
+        updateHashForPiecePosition(sideToMove_, move.pieceToMove, move.from, pawnKingHash_);
     }
 
     if (isCapture(move)) {
@@ -761,33 +780,43 @@ void GameState::unmakeSinglePieceMove(const Move& move, const UnmakeMoveInfo& un
         }
 
         BitBoard& capturedPieceBitBoard =
-                getPieceBitBoard(nextSide(sideToMove_), unmakeMoveInfo.capturedPiece);
+                getPieceBitBoardMut(nextSide(sideToMove_), unmakeMoveInfo.capturedPiece);
         capturedPieceBitBoard |= captureTarget;
-        getEnemyOccupancy() |= captureTarget;
+        getEnemyOccupancyMut() |= captureTarget;
 
-        getPieceOnSquare(captureTarget) =
+        getPieceOnSquareMut(captureTarget) =
                 getColoredPiece(unmakeMoveInfo.capturedPiece, nextSide(sideToMove_));
         if (isEnPassant(move.flags)) {
-            getPieceOnSquare(move.to) = ColoredPiece::Invalid;
+            getPieceOnSquareMut(move.to) = ColoredPiece::Invalid;
+        }
+
+        if (unmakeMoveInfo.capturedPiece == Piece::Pawn) {
+            updateHashForPiecePosition(
+                    nextSide(sideToMove_), Piece::Pawn, captureTarget, pawnKingHash_);
         }
     } else {
-        getPieceOnSquare(move.to) = ColoredPiece::Invalid;
+        getPieceOnSquareMut(move.to) = ColoredPiece::Invalid;
     }
 }
 
 void GameState::handlePawnMove(const Move& move) {
     const Piece promotionPiece = getPromotionPiece(move);
     if (promotionPiece != Piece::Pawn) {
-        BitBoard& pawnBitBoard           = getPieceBitBoard(sideToMove_, Piece::Pawn);
-        BitBoard& promotionPieceBitBoard = getPieceBitBoard(sideToMove_, promotionPiece);
+        BitBoard& pawnBitBoard           = getPieceBitBoardMut(sideToMove_, Piece::Pawn);
+        BitBoard& promotionPieceBitBoard = getPieceBitBoardMut(sideToMove_, promotionPiece);
 
         pawnBitBoard &= ~move.to;
         promotionPieceBitBoard |= move.to;
 
-        getPieceOnSquare(move.to) = getColoredPiece(promotionPiece, sideToMove_);
+        getPieceOnSquareMut(move.to) = getColoredPiece(promotionPiece, sideToMove_);
 
         updateHashForPiecePosition(sideToMove_, Piece::Pawn, move.to, boardHash_);
         updateHashForPiecePosition(sideToMove_, promotionPiece, move.to, boardHash_);
+
+        updateHashForPiecePosition(sideToMove_, Piece::Pawn, move.from, pawnKingHash_);
+    } else {
+        updateHashForPiecePosition(sideToMove_, Piece::Pawn, move.from, pawnKingHash_);
+        updateHashForPiecePosition(sideToMove_, Piece::Pawn, move.to, pawnKingHash_);
     }
 
     const auto [fromFile, fromRank] = fileRankFromPosition(move.from);
@@ -801,7 +830,7 @@ void GameState::handlePawnMove(const Move& move) {
     }
 }
 
-void GameState::handleNormalKingMove() {
+void GameState::handleNormalKingMove(const Move& move) {
     if (canCastleKingSide(sideToMove_)) {
         setCanCastleKingSide(sideToMove_, false);
         updateHashForKingSideCastlingRights(sideToMove_, boardHash_);
@@ -811,6 +840,9 @@ void GameState::handleNormalKingMove() {
         setCanCastleQueenSide(sideToMove_, false);
         updateHashForQueenSideCastlingRights(sideToMove_, boardHash_);
     }
+
+    updateHashForPiecePosition(sideToMove_, Piece::King, move.from, pawnKingHash_);
+    updateHashForPiecePosition(sideToMove_, Piece::King, move.to, pawnKingHash_);
 }
 
 void GameState::updateRookCastlingRights(BoardPosition rookPosition, Side rookSide) {

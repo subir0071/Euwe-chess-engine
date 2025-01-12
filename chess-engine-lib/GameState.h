@@ -117,6 +117,7 @@ class GameState {
     [[nodiscard]] std::uint16_t getHalfMoveClock() const { return halfMoveClock_; }
 
     [[nodiscard]] HashT getBoardHash() const { return boardHash_; }
+    [[nodiscard]] HashT getPawnKingHash() const { return pawnKingHash_; }
 
     [[nodiscard]] BitBoard getAnyOccupancy() const { return occupancy_[0] | occupancy_[1]; }
 
@@ -144,22 +145,24 @@ class GameState {
         PieceIdentifier secondCheckingPieceId = {Piece::Invalid, BoardPosition::Invalid};
     };
 
-    [[nodiscard]] BitBoard& getPieceBitBoard(Side side, Piece piece) {
+    [[nodiscard]] BitBoard& getPieceBitBoardMut(Side side, Piece piece) {
         return pieceBitBoards_[(int)side][(int)piece];
     }
-    [[nodiscard]] BitBoard& getPieceBitBoard(ColoredPiece coloredPiece) {
-        return getPieceBitBoard(getSide(coloredPiece), getPiece(coloredPiece));
+    [[nodiscard]] BitBoard& getPieceBitBoardMut(ColoredPiece coloredPiece) {
+        return getPieceBitBoardMut(getSide(coloredPiece), getPiece(coloredPiece));
     }
 
-    [[nodiscard]] ColoredPiece& getPieceOnSquare(BoardPosition position) {
+    [[nodiscard]] ColoredPiece& getPieceOnSquareMut(BoardPosition position) {
         return pieceOnSquare_[(int)position];
     }
 
-    [[nodiscard]] BitBoard& getSideOccupancy(const Side side) { return occupancy_[(int)side]; }
+    [[nodiscard]] BitBoard& getSideOccupancyMut(const Side side) { return occupancy_[(int)side]; }
 
-    [[nodiscard]] BitBoard& getOwnOccupancy() { return getSideOccupancy(sideToMove_); }
+    [[nodiscard]] BitBoard& getOwnOccupancyMut() { return getSideOccupancyMut(sideToMove_); }
 
-    [[nodiscard]] BitBoard& getEnemyOccupancy() { return getSideOccupancy(nextSide(sideToMove_)); }
+    [[nodiscard]] BitBoard& getEnemyOccupancyMut() {
+        return getSideOccupancyMut(nextSide(sideToMove_));
+    }
 
     [[nodiscard]] bool enPassantWillPutUsInCheck() const;
 
@@ -172,7 +175,7 @@ class GameState {
     void makeCastleMove(const Move& move, bool reverse = false);
     [[nodiscard]] Piece makeSinglePieceMove(const Move& move);
     void handlePawnMove(const Move& move);
-    void handleNormalKingMove();
+    void handleNormalKingMove(const Move& move);
     void updateRookCastlingRights(BoardPosition rookPosition, Side rookSide);
 
     void unmakeSinglePieceMove(const Move& move, const UnmakeMoveInfo& unmakeMoveInfo);
@@ -195,7 +198,8 @@ class GameState {
 
     std::array<BitBoard, kNumSides> occupancy_ = {};
 
-    HashT boardHash_ = 0;
+    HashT boardHash_    = 0;
+    HashT pawnKingHash_ = 0;
 
     std::vector<HashT> previousHashes_ = {};
 

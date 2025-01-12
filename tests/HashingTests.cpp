@@ -33,6 +33,60 @@ void findHashCollisions(GameState& gameState, const int depth, StackOfVectors<Mo
     }
 }
 
+struct PawnKingBitBoards {
+    BitBoard whitePawns;
+    BitBoard blackPawns;
+    BitBoard whiteKing;
+    BitBoard blackKing;
+
+    [[nodiscard]] bool operator==(const PawnKingBitBoards& other) const = default;
+};
+
+std::unordered_map<HashT, PawnKingBitBoards> gHashToPawnKingBitBoards;
+
+void findPawnKingHashCollisions(
+        GameState& gameState, const int depth, StackOfVectors<Move>& stack) {
+    const HashT pawnKingHash = gameState.getPawnKingHash();
+    const PawnKingBitBoards pawnKingBitBoards{
+            .whitePawns = gameState.getPieceBitBoard(Side::White, Piece::Pawn),
+            .blackPawns = gameState.getPieceBitBoard(Side::Black, Piece::Pawn),
+            .whiteKing  = gameState.getPieceBitBoard(Side::White, Piece::King),
+            .blackKing  = gameState.getPieceBitBoard(Side::Black, Piece::King)};
+
+    if (gHashToPawnKingBitBoards.contains(pawnKingHash)) {
+        EXPECT_EQ(gHashToPawnKingBitBoards[pawnKingHash], pawnKingBitBoards);
+    } else {
+        gHashToPawnKingBitBoards.emplace(pawnKingHash, pawnKingBitBoards);
+    }
+
+    if (depth == 0) {
+        return;
+    }
+
+    const StackVector<Move> moves = gameState.generateMoves(stack);
+
+    for (const Move move : moves) {
+        const auto unmakeInfo = gameState.makeMove(move);
+
+        const HashT newPawnKingHash = gameState.getPawnKingHash();
+        const PawnKingBitBoards newPawnKingBitBoards{
+                .whitePawns = gameState.getPieceBitBoard(Side::White, Piece::Pawn),
+                .blackPawns = gameState.getPieceBitBoard(Side::Black, Piece::Pawn),
+                .whiteKing  = gameState.getPieceBitBoard(Side::White, Piece::King),
+                .blackKing  = gameState.getPieceBitBoard(Side::Black, Piece::King)};
+
+        EXPECT_EQ(pawnKingHash == newPawnKingHash, pawnKingBitBoards == newPawnKingBitBoards)
+                << move.toAlgebraic(gameState);
+
+        findPawnKingHashCollisions(gameState, depth - 1, stack);
+
+        gameState.unmakeMove(move, unmakeInfo);
+
+        const HashT undonePawnKingHash = gameState.getPawnKingHash();
+        EXPECT_EQ(pawnKingHash, undonePawnKingHash) << move.toAlgebraic(gameState);
+    }
+}
+
 struct HashCollisionTestConfig {
     std::string fen;
     int depth;
@@ -46,6 +100,14 @@ TEST_P(HashCollisionTests, FindHashCollisions) {
     GameState gameState = GameState::fromFen(config.fen);
     StackOfVectors<Move> stack;
     findHashCollisions(gameState, config.depth, stack);
+}
+
+TEST_P(HashCollisionTests, FindPawnKingHashCollisions) {
+    const HashCollisionTestConfig config = GetParam();
+
+    GameState gameState = GameState::fromFen(config.fen);
+    StackOfVectors<Move> stack;
+    findPawnKingHashCollisions(gameState, config.depth, stack);
 }
 
 inline const std::string kKiwipeteFen =
