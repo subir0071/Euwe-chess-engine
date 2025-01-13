@@ -1,6 +1,7 @@
 #include "Eval.h"
 
 #include "BitBoard.h"
+#include "Intrinsics.h"
 #include "Macros.h"
 #include "Math.h"
 #include "PawnMasks.h"
@@ -12,6 +13,18 @@
 #include <utility>
 
 namespace {
+constexpr std::size_t kPawnKingHashTableSizeBytes = 4 * 1024 * 1024;
+constexpr std::size_t kPawnKingHashTableEntries =
+        kPawnKingHashTableSizeBytes / sizeof(PawnKingEvalInfo);
+
+[[nodiscard]] constexpr bool isPowerOfTwo(const std::size_t x) {
+    return x != 0 && (x & (x - 1)) == 0;
+}
+
+static_assert(isPowerOfTwo(kPawnKingHashTableEntries));
+
+constexpr std::size_t kPawnKingHashTableMask = kPawnKingHashTableEntries - 1;
+
 using PstMappingBySide = std::array<PstMapping, kNumSides>;
 
 struct PstMappings {
@@ -487,9 +500,6 @@ void evaluatePiecePositionsForSide(
 
     // King
     {
-        updatePiecePositionEvaluation<CalcJacobians, /*IsKing*/ true>(
-                params, (int)Piece::King, ownKingPosition, side, result);
-
         // no mobility bonus for king
 
         updateForVirtualKingMobility<CalcJacobians>(
@@ -509,8 +519,6 @@ void evaluatePiecePositionsForSide(
                 params, params.numKingAttackersAdjustment[numKingAttackersIdx], result.eval, 1);
 
         updateForPins(params, gameState, side, ownKingPosition, anyPiece, result.eval);
-
-        updateForKingOpenFiles(params, side, ownKingPosition, ownPawns, result.eval);
     }
 }
 
@@ -682,7 +690,7 @@ getPromotionSquare(const BoardPosition pawnPosition, const Side pawnSide) {
 }
 
 template <bool CalcJacobians>
-void evaluatePawnsForSide(
+void evaluatePawnKingForSide(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
         const Side side,
@@ -690,21 +698,16 @@ void evaluatePawnsForSide(
         const BoardPosition enemyKingPosition,
         const BitBoard ownKingArea,
         const BitBoard enemyKingArea,
-        PiecePositionEvaluation<CalcJacobians>& result) {
+        PiecePositionEvaluation<CalcJacobians>& result,
+        bool& hasConditionallyUnstoppablePawn) {
     const Side enemySide = nextSide(side);
 
     const BitBoard ownPawns   = gameState.getPieceBitBoard(side, Piece::Pawn);
     const BitBoard enemyPawns = gameState.getPieceBitBoard(enemySide, Piece::Pawn);
 
-    const bool enemyHasPieces = (gameState.getPieceBitBoard(enemySide, Piece::Knight)
-                                 | gameState.getPieceBitBoard(enemySide, Piece::Bishop)
-                                 | gameState.getPieceBitBoard(enemySide, Piece::Rook)
-                                 | gameState.getPieceBitBoard(enemySide, Piece::Queen))
-                             != BitBoard::Empty;
-
     BitBoard pawnBitBoard = ownPawns;
 
-    bool hasUnstoppablePawn = false;
+    hasConditionallyUnstoppablePawn = false;
     std::array<EvalCalcT, kFiles + 2> filePassedPawnWeight{};
 
     while (pawnBitBoard != BitBoard::Empty) {
@@ -745,10 +748,9 @@ void evaluatePawnsForSide(
             updateTaperedTerm(
                     params, params.passedPawnOutsideKingSquare, result.eval, outsideKingSquare);
 
-            const bool kingCoversPromotion = (forwardMask & ownKingArea) == forwardMask;
-            const bool pawnIsUnstoppable =
-                    !enemyHasPieces && (outsideKingSquare || kingCoversPromotion);
-            hasUnstoppablePawn |= pawnIsUnstoppable;
+            const bool kingCoversPromotion            = (forwardMask & ownKingArea) == forwardMask;
+            const bool pawnIsConditionallyUnstoppable = outsideKingSquare || kingCoversPromotion;
+            hasConditionallyUnstoppablePawn |= pawnIsConditionallyUnstoppable;
 
             const std::size_t passedPawnWeightIdx     = file + 1;
             filePassedPawnWeight[passedPawnWeightIdx] = 0.5;
@@ -785,15 +787,221 @@ void evaluatePawnsForSide(
     updateTaperedTerm(
             params, params.kingAttackWeight[(int)Piece::Pawn], result.eval, numAttackedSquares);
 
-    if (hasUnstoppablePawn) {
-        result.eval.early.value += params.hasUnstoppablePawn;
-        result.eval.late.value += params.hasUnstoppablePawn;
-        if constexpr (CalcJacobians) {
-            const auto paramIdx = params.getParamIndex(params.hasUnstoppablePawn);
-            result.eval.early.grad[paramIdx] += 1;
-            result.eval.late.grad[paramIdx] += 1;
+    updatePiecePositionEvaluation<CalcJacobians, /*IsKing*/ true>(
+            params, (int)Piece::King, ownKingPosition, side, result);
+
+    updateForKingOpenFiles(params, side, ownKingPosition, ownPawns, result.eval);
+}
+
+template <bool CalcJacobians>
+FORCE_INLINE void evaluateUnstoppablePawn(
+        const Evaluator::EvalCalcParams& params,
+        const GameState& gameState,
+        const Side side,
+        const bool hasConditionallyUnstoppablePawn,
+        PiecePositionEvaluation<CalcJacobians>& result) {
+    if (!hasConditionallyUnstoppablePawn) {
+        return;
+    }
+
+    const Side enemySide = nextSide(side);
+
+    const bool enemyHasPieces = (gameState.getPieceBitBoard(enemySide, Piece::Knight)
+                                 | gameState.getPieceBitBoard(enemySide, Piece::Bishop)
+                                 | gameState.getPieceBitBoard(enemySide, Piece::Rook)
+                                 | gameState.getPieceBitBoard(enemySide, Piece::Queen))
+                             != BitBoard::Empty;
+
+    if (enemyHasPieces) {
+        return;
+    }
+
+    result.eval.early.value += params.hasUnstoppablePawn;
+    result.eval.late.value += params.hasUnstoppablePawn;
+    if constexpr (CalcJacobians) {
+        const auto paramIdx = params.getParamIndex(params.hasUnstoppablePawn);
+        result.eval.early.grad[paramIdx] += 1;
+        result.eval.late.grad[paramIdx] += 1;
+    }
+}
+
+template <bool CalcJacobians>
+FORCE_INLINE void updateControlForKing(
+        const BitBoard whiteKingArea,
+        const BitBoard blackKingArea,
+        PiecePositionEvaluation<CalcJacobians>& whiteResult,
+        PiecePositionEvaluation<CalcJacobians>& blackResult) {
+    const BitBoard kingOverlap      = whiteKingArea & blackKingArea;
+    const bool kingsAttackEachOther = kingOverlap != BitBoard::Empty;
+
+    whiteResult.control |= whiteKingArea;
+    whiteResult.kingAttack |= kingOverlap;
+    whiteResult.numKingAttackers += kingsAttackEachOther;
+
+    blackResult.control |= blackKingArea;
+    blackResult.kingAttack |= kingOverlap;
+    blackResult.numKingAttackers += kingsAttackEachOther;
+}
+
+template <bool CalcJacobians>
+FORCE_INLINE void evaluatePawnKing(
+        const Evaluator::EvalCalcParams& params,
+        const GameState& gameState,
+        const BoardPosition whiteKingPosition,
+        const BoardPosition blackKingPosition,
+        const BitBoard whiteKingArea,
+        const BitBoard blackKingArea,
+        PawnKingEvalHashTable& pawnKingEvalHashTable,
+        PiecePositionEvaluation<CalcJacobians>& whiteResult,
+        PiecePositionEvaluation<CalcJacobians>& blackResult) {
+    bool whiteHasConditionallyUnstoppablePawn;
+    bool blackHasConditionallyUnstoppablePawn;
+
+    evaluatePawnKingForSide(
+            params,
+            gameState,
+            Side::White,
+            whiteKingPosition,
+            blackKingPosition,
+            whiteKingArea,
+            blackKingArea,
+            whiteResult,
+            whiteHasConditionallyUnstoppablePawn);
+
+    evaluatePawnKingForSide(
+            params,
+            gameState,
+            Side::Black,
+            blackKingPosition,
+            whiteKingPosition,
+            blackKingArea,
+            whiteKingArea,
+            blackResult,
+            blackHasConditionallyUnstoppablePawn);
+
+    if (!pawnKingEvalHashTable.empty()) {
+        const PawnKingEvalInfo pawnKingEvalInfo{
+                .whitePawnControl = whiteResult.control,
+                .blackPawnControl = blackResult.control,
+
+                .earlyEval = whiteResult.eval.early.value - blackResult.eval.early.value,
+                .lateEval  = whiteResult.eval.late.value - blackResult.eval.late.value,
+
+                .phaseMaterial = whiteResult.phaseMaterial.value + blackResult.phaseMaterial.value,
+
+                .whiteHasConditionallyUnstoppablePawn = whiteHasConditionallyUnstoppablePawn,
+                .blackHasConditionallyUnstoppablePawn = blackHasConditionallyUnstoppablePawn,
+        };
+
+        pawnKingEvalHashTable.store(gameState.getPawnKingHash(), pawnKingEvalInfo);
+    }
+
+    updateControlForKing(whiteKingArea, blackKingArea, whiteResult, blackResult);
+
+    evaluateUnstoppablePawn(
+            params, gameState, Side::White, whiteHasConditionallyUnstoppablePawn, whiteResult);
+
+    evaluateUnstoppablePawn(
+            params, gameState, Side::Black, blackHasConditionallyUnstoppablePawn, blackResult);
+}
+
+FORCE_INLINE void useStoredPawnKingEval(
+        const Evaluator::EvalCalcParams& params,
+        const GameState& gameState,
+        const BitBoard whiteKingArea,
+        const BitBoard blackKingArea,
+        const PawnKingEvalInfo& pawnKingEvalInfo,
+        PiecePositionEvaluation<false>& whiteResult,
+        PiecePositionEvaluation<false>& blackResult) {
+    // Apply the retrieved eval and phase material values to the white result, and leave the black result unchanged.
+    // Eventually we'll just sum the white and black results together anyway.
+    whiteResult.eval.early.value += pawnKingEvalInfo.earlyEval;
+    whiteResult.eval.late.value += pawnKingEvalInfo.lateEval;
+
+    whiteResult.phaseMaterial.value += pawnKingEvalInfo.phaseMaterial;
+
+    /*
+    const BitBoard pawnControl = getPawnControlledSquares(ownPawns, side);
+    result.control |= pawnControl;
+
+    const BitBoard kingAttack = enemyKingArea & pawnControl;
+    result.kingAttack |= kingAttack;
+
+    const int numAttackedSquares = popCount(kingAttack);
+    result.numKingAttackers += numAttackedSquares;
+    */
+    const auto updateFromControlForSide = [](const BitBoard pawnControl,
+                                             const BitBoard enemyKingArea,
+                                             PiecePositionEvaluation<false>& result) {
+        result.control |= pawnControl;
+
+        const BitBoard kingAttack = enemyKingArea & pawnControl;
+        result.kingAttack |= kingAttack;
+
+        const int numAttackedSquares = popCount(kingAttack);
+        result.numKingAttackers += numAttackedSquares;
+    };
+
+    updateFromControlForSide(pawnKingEvalInfo.whitePawnControl, blackKingArea, whiteResult);
+    updateFromControlForSide(pawnKingEvalInfo.blackPawnControl, whiteKingArea, blackResult);
+
+    updateControlForKing(whiteKingArea, blackKingArea, whiteResult, blackResult);
+
+    evaluateUnstoppablePawn(
+            params,
+            gameState,
+            Side::White,
+            pawnKingEvalInfo.whiteHasConditionallyUnstoppablePawn,
+            whiteResult);
+
+    evaluateUnstoppablePawn(
+            params,
+            gameState,
+            Side::Black,
+            pawnKingEvalInfo.blackHasConditionallyUnstoppablePawn,
+            blackResult);
+}
+
+template <bool CalcJacobians>
+FORCE_INLINE void evaluatePawnKingOrRetrieve(
+        const Evaluator::EvalCalcParams& params,
+        const GameState& gameState,
+        const BoardPosition whiteKingPosition,
+        const BoardPosition blackKingPosition,
+        const BitBoard whiteKingArea,
+        const BitBoard blackKingArea,
+        PawnKingEvalHashTable& pawnKingEvalHashTable,
+        PiecePositionEvaluation<CalcJacobians>& whiteResult,
+        PiecePositionEvaluation<CalcJacobians>& blackResult) {
+    if constexpr (!CalcJacobians) {
+        if (!pawnKingEvalHashTable.empty()) {
+            const auto retrievedInfo = pawnKingEvalHashTable.probe(gameState.getPawnKingHash());
+
+            if (retrievedInfo) {
+                useStoredPawnKingEval(
+                        params,
+                        gameState,
+                        whiteKingArea,
+                        blackKingArea,
+                        *retrievedInfo,
+                        whiteResult,
+                        blackResult);
+
+                return;
+            }
         }
     }
+
+    evaluatePawnKing(
+            params,
+            gameState,
+            whiteKingPosition,
+            blackKingPosition,
+            whiteKingArea,
+            blackKingArea,
+            pawnKingEvalHashTable,
+            whiteResult,
+            blackResult);
 }
 
 [[nodiscard]] FORCE_INLINE ParamGradient<true> getMaxPhaseMaterialGradient(
@@ -946,7 +1154,9 @@ FORCE_INLINE void getPstMapping(
 
 template <bool CalcJacobians>
 [[nodiscard]] FORCE_INLINE TermWithGradient<CalcJacobians> evaluateForWhite(
-        const Evaluator::EvalCalcParams& params, const GameState& gameState) {
+        const Evaluator::EvalCalcParams& params,
+        const GameState& gameState,
+        PawnKingEvalHashTable& pawnKingEvalHashTable) {
 
     const BoardPosition whiteKingPosition =
             getFirstSetPosition(gameState.getPieceBitBoard(Side::White, Piece::King));
@@ -961,17 +1171,6 @@ template <bool CalcJacobians>
     const BitBoard blackKingArea =
             getPieceControlledSquares(Piece::King, blackKingPosition, BitBoard::Empty);
 
-    const BitBoard kingOverlap      = whiteKingArea & blackKingArea;
-    const bool kingsAttackEachOther = kingOverlap != BitBoard::Empty;
-
-    whitePiecePositionEval.control          = whiteKingArea;
-    whitePiecePositionEval.kingAttack       = kingOverlap;
-    whitePiecePositionEval.numKingAttackers = kingsAttackEachOther;
-
-    blackPiecePositionEval.control          = blackKingArea;
-    blackPiecePositionEval.kingAttack       = kingOverlap;
-    blackPiecePositionEval.numKingAttackers = kingsAttackEachOther;
-
     // No need to add king attack weight for the king itself: that would be symmetric.
 
     getPstMapping(
@@ -982,23 +1181,15 @@ template <bool CalcJacobians>
             blackPiecePositionEval.pstIndex,
             blackPiecePositionEval.pstIndexKing);
 
-    evaluatePawnsForSide(
+    evaluatePawnKingOrRetrieve(
             params,
             gameState,
-            Side::White,
             whiteKingPosition,
             blackKingPosition,
             whiteKingArea,
             blackKingArea,
-            whitePiecePositionEval);
-    evaluatePawnsForSide(
-            params,
-            gameState,
-            Side::Black,
-            blackKingPosition,
-            whiteKingPosition,
-            blackKingArea,
-            whiteKingArea,
+            pawnKingEvalHashTable,
+            whitePiecePositionEval,
             blackPiecePositionEval);
 
     evaluatePiecePositionsForSide(
@@ -1120,6 +1311,43 @@ template <bool CalcJacobians>
 
 }  // namespace
 
+PawnKingEvalHashTable::PawnKingEvalHashTable(const bool nonEmpty) {
+    if (nonEmpty) {
+        data_ = std::make_unique<Entry[]>(kPawnKingHashTableEntries);
+    }
+}
+
+FORCE_INLINE std::optional<PawnKingEvalInfo> PawnKingEvalHashTable::probe(const HashT hash) const {
+    MY_ASSERT(!empty());
+
+    const std::size_t index = hash & kPawnKingHashTableMask;
+
+    const Entry& entry = data_[index];
+    if (entry.hash == hash) {
+        return entry.info;
+    }
+
+    return std::nullopt;
+}
+
+FORCE_INLINE void PawnKingEvalHashTable::prefetch(const HashT hash) const {
+    MY_ASSERT(!empty());
+
+    const std::size_t index = hash & kPawnKingHashTableMask;
+
+    ::prefetch(&data_[index]);
+}
+
+FORCE_INLINE void PawnKingEvalHashTable::store(HashT hash, const PawnKingEvalInfo& info) {
+    MY_ASSERT(!empty());
+
+    const std::size_t index = hash & kPawnKingHashTableMask;
+
+    Entry& entry = data_[index];
+    entry.hash   = hash;
+    entry.info   = info;
+}
+
 Evaluator::EvalCalcParams::EvalCalcParams(const EvalParams& evalParams) : EvalParams(evalParams) {
     maxPhaseMaterial_ = 2 * 8 * evalParams.phaseMaterialValues[(int)Piece::Pawn]
                       + 2 * 2 * evalParams.phaseMaterialValues[(int)Piece::Knight]
@@ -1129,9 +1357,11 @@ Evaluator::EvalCalcParams::EvalCalcParams(const EvalParams& evalParams) : EvalPa
                       + 2 * 1 * evalParams.phaseMaterialValues[(int)Piece::King];
 }
 
-Evaluator::Evaluator() : Evaluator(EvalParams::getDefaultParams()) {}
+Evaluator::Evaluator(bool usePawnKingEvalHashTable)
+    : Evaluator(EvalParams::getDefaultParams(), usePawnKingEvalHashTable) {}
 
-Evaluator::Evaluator(const EvalParams& params) : params_(params) {}
+Evaluator::Evaluator(const EvalParams& params, bool usePawnKingEvalHashTable)
+    : params_(params), pawnKingEvalHashTable_(/*nonEmpty*/ usePawnKingEvalHashTable) {}
 
 FORCE_INLINE int Evaluator::getPieceSquareValue(
         const Piece piece, BoardPosition position, const Side side) const {
@@ -1149,13 +1379,13 @@ FORCE_INLINE int Evaluator::getPieceSquareValue(
 }
 
 EvalCalcT Evaluator::evaluateRaw(const GameState& gameState) const {
-    const auto rawEvalWhite = evaluateForWhite<false>(params_, gameState);
+    const auto rawEvalWhite = evaluateForWhite<false>(params_, gameState, pawnKingEvalHashTable_);
 
     return gameState.getSideToMove() == Side::White ? rawEvalWhite.value : -rawEvalWhite.value;
 }
 
 EvalWithGradient Evaluator::evaluateWithGradient(const GameState& gameState) const {
-    const auto rawEvalWhite = evaluateForWhite<true>(params_, gameState);
+    const auto rawEvalWhite = evaluateForWhite<true>(params_, gameState, pawnKingEvalHashTable_);
 
     const EvalCalcT colorFactor = gameState.getSideToMove() == Side::White ? 1 : -1;
 
@@ -1163,12 +1393,20 @@ EvalWithGradient Evaluator::evaluateWithGradient(const GameState& gameState) con
 }
 
 EvalT Evaluator::evaluate(const GameState& gameState) const {
-    const auto rawEvalWhite = evaluateForWhite<false>(params_, gameState);
+    const auto rawEvalWhite = evaluateForWhite<false>(params_, gameState, pawnKingEvalHashTable_);
 
     const EvalT clampedEvalWhite =
             (EvalT)clamp((int)rawEvalWhite.value, -kMateEval + 1'000, kMateEval - 1'000);
 
     return gameState.getSideToMove() == Side::White ? clampedEvalWhite : -clampedEvalWhite;
+}
+
+FORCE_INLINE void Evaluator::prefetch(const GameState& gameState) const {
+    if (pawnKingEvalHashTable_.empty()) {
+        return;
+    }
+
+    pawnKingEvalHashTable_.prefetch(gameState.getPawnKingHash());
 }
 
 FORCE_INLINE int getStaticPieceValue(const Piece piece) {

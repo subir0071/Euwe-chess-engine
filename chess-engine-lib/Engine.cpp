@@ -31,7 +31,8 @@ class Engine::Impl {
 };
 
 Engine::Impl::Impl()
-    : evaluator_(EvalParams::getDefaultParams()), moveSearcher_(timeManager_, evaluator_) {
+    : evaluator_(EvalParams::getDefaultParams(), /*usePawnKingEvalHashTable*/ true),
+      moveSearcher_(timeManager_, evaluator_) {
     moveStack_.reserve(1'000);
 }
 

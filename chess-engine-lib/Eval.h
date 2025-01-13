@@ -4,6 +4,7 @@
 #include "EvalT.h"
 #include "GameState.h"
 
+#include <memory>
 #include <valarray>
 
 using VectorT = std::valarray<double>;
@@ -15,6 +16,41 @@ struct EvalWithGradient {
 
 using PstMapping = std::array<std::int8_t, kSquares>;
 
+struct PawnKingEvalInfo {
+    BitBoard whitePawnControl = BitBoard::Empty;
+    BitBoard blackPawnControl = BitBoard::Empty;
+
+    EvalCalcT earlyEval = 0.;
+    EvalCalcT lateEval  = 0.;
+
+    EvalCalcT phaseMaterial = 0.;
+
+    // Conditionally unstoppable means: unstoppable if enemy has no pieces.
+    bool whiteHasConditionallyUnstoppablePawn = false;
+    bool blackHasConditionallyUnstoppablePawn = false;
+};
+
+class PawnKingEvalHashTable {
+  public:
+    explicit PawnKingEvalHashTable(bool nonEmpty);
+
+    [[nodiscard]] std::optional<PawnKingEvalInfo> probe(HashT hash) const;
+
+    void prefetch(HashT hash) const;
+
+    void store(HashT hash, const PawnKingEvalInfo& info);
+
+    [[nodiscard]] bool empty() const { return data_ == nullptr; }
+
+  private:
+    struct Entry {
+        HashT hash = 0;
+        PawnKingEvalInfo info{};
+    };
+
+    std::unique_ptr<Entry[]> data_;
+};
+
 class Evaluator {
   public:
     struct EvalCalcParams : EvalParams {
@@ -23,8 +59,8 @@ class Evaluator {
         EvalCalcT maxPhaseMaterial_{};
     };
 
-    Evaluator();
-    Evaluator(const EvalParams& params);
+    explicit Evaluator(bool usePawnKingEvalHashTable = false);
+    explicit Evaluator(const EvalParams& params, bool usePawnKingEvalHashTable = false);
 
     [[nodiscard]] int getPieceSquareValue(Piece piece, BoardPosition position, Side side) const;
 
@@ -34,8 +70,12 @@ class Evaluator {
 
     [[nodiscard]] EvalT evaluate(const GameState& gameState) const;
 
+    void prefetch(const GameState& gameState) const;
+
   private:
     EvalCalcParams params_;
+
+    mutable PawnKingEvalHashTable pawnKingEvalHashTable_;
 };
 
 [[nodiscard]] int getStaticPieceValue(Piece piece);

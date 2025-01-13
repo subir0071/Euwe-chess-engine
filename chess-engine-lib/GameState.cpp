@@ -498,6 +498,7 @@ GameState::UnmakeMoveInfo GameState::makeNullMove() {
     ++halfMoveClock_;
 
     updateHashForSideToMove(boardHash_);
+    updateHashForSideToMove(pawnKingHash_);
 
     // We consider a null move to be irreversible for tie checking purposes.
     // For discussion see: https://www.talkchess.com/forum/viewtopic.php?t=35052
@@ -544,6 +545,7 @@ void GameState::unmakeNullMove(const UnmakeMoveInfo& unmakeMoveInfo) {
     previousHashes_.pop_back();
 
     boardHash_ = previousHashes_.back();
+    updateHashForSideToMove(pawnKingHash_);
 
     pinBitBoard_.reset();
 }
@@ -625,6 +627,7 @@ void GameState::makeCastleMove(const Move& move, const bool reverse) {
 
     updateHashForPiecePosition(sideToMove_, Piece::King, kingFromPosition, pawnKingHash_);
     updateHashForPiecePosition(sideToMove_, Piece::King, kingToPosition, pawnKingHash_);
+    updateHashForSideToMove(pawnKingHash_);
 
     if (!reverse) {
         updateHashForPiecePosition(sideToMove_, Piece::King, kingFromPosition, boardHash_);
@@ -741,6 +744,7 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
     sideToMove_ = nextSide(sideToMove_);
 
     updateHashForSideToMove(boardHash_);
+    updateHashForSideToMove(pawnKingHash_);
 
     return capturedPiece;
 }
@@ -797,6 +801,8 @@ void GameState::unmakeSinglePieceMove(const Move& move, const UnmakeMoveInfo& un
     } else {
         getPieceOnSquareMut(move.to) = ColoredPiece::Invalid;
     }
+
+    updateHashForSideToMove(pawnKingHash_);
 }
 
 void GameState::handlePawnMove(const Move& move) {

@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "futility-eval-ttable");
+            UciFrontEnd uciFrontEnd(engine, "pawn-king-eval-hash-table");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

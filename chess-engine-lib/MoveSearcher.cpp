@@ -822,6 +822,7 @@ EvalT MoveSearcher::Impl::quiesce(
             const auto unmakeInfo = gameState.makeMove(*hashMove);
 
             tTable_.prefetch(gameState.getBoardHash());
+            evaluator_.prefetch(gameState);
 
             EvalT score = -quiesce(gameState, -beta, -alpha, ply + 1, stack);
 
@@ -915,6 +916,7 @@ EvalT MoveSearcher::Impl::quiesce(
         const auto unmakeInfo = gameState.makeMove(move);
 
         tTable_.prefetch(gameState.getBoardHash());
+        evaluator_.prefetch(gameState);
 
         EvalT score = -quiesce(gameState, -beta, -alpha, ply + 1, stack);
 
@@ -993,6 +995,7 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
         updateHashForSideToMove(hashToPrefetch);
     }
     tTable_.prefetch(hashToPrefetch);
+    evaluator_.prefetch(gameState);
 
     EvalT score;
     if (useScoutSearch) {

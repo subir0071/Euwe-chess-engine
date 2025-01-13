@@ -31,32 +31,40 @@ void findHashCollisions(GameState& gameState, const int depth, StackOfVectors<Mo
         findHashCollisions(gameState, depth - 1, stack);
         gameState.unmakeMove(move, unmakeInfo);
     }
+
+    if (!gameState.isInCheck()) {
+        const auto nullMoveUnmake = gameState.makeNullMove();
+        findHashCollisions(gameState, depth - 1, stack);
+        gameState.unmakeNullMove(nullMoveUnmake);
+    }
 }
 
-struct PawnKingBitBoards {
+struct PawnKingInfo {
     BitBoard whitePawns;
     BitBoard blackPawns;
     BitBoard whiteKing;
     BitBoard blackKing;
+    Side sideToMove;
 
-    [[nodiscard]] bool operator==(const PawnKingBitBoards& other) const = default;
+    [[nodiscard]] bool operator==(const PawnKingInfo& other) const = default;
 };
 
-std::unordered_map<HashT, PawnKingBitBoards> gHashToPawnKingBitBoards;
+std::unordered_map<HashT, PawnKingInfo> gHashToPawnKingInfo;
 
 void findPawnKingHashCollisions(
         GameState& gameState, const int depth, StackOfVectors<Move>& stack) {
     const HashT pawnKingHash = gameState.getPawnKingHash();
-    const PawnKingBitBoards pawnKingBitBoards{
+    const PawnKingInfo pawnKingInfo{
             .whitePawns = gameState.getPieceBitBoard(Side::White, Piece::Pawn),
             .blackPawns = gameState.getPieceBitBoard(Side::Black, Piece::Pawn),
             .whiteKing  = gameState.getPieceBitBoard(Side::White, Piece::King),
-            .blackKing  = gameState.getPieceBitBoard(Side::Black, Piece::King)};
+            .blackKing  = gameState.getPieceBitBoard(Side::Black, Piece::King),
+            .sideToMove = gameState.getSideToMove()};
 
-    if (gHashToPawnKingBitBoards.contains(pawnKingHash)) {
-        EXPECT_EQ(gHashToPawnKingBitBoards[pawnKingHash], pawnKingBitBoards);
+    if (gHashToPawnKingInfo.contains(pawnKingHash)) {
+        EXPECT_EQ(gHashToPawnKingInfo[pawnKingHash], pawnKingInfo);
     } else {
-        gHashToPawnKingBitBoards.emplace(pawnKingHash, pawnKingBitBoards);
+        gHashToPawnKingInfo.emplace(pawnKingHash, pawnKingInfo);
     }
 
     if (depth == 0) {
@@ -69,13 +77,14 @@ void findPawnKingHashCollisions(
         const auto unmakeInfo = gameState.makeMove(move);
 
         const HashT newPawnKingHash = gameState.getPawnKingHash();
-        const PawnKingBitBoards newPawnKingBitBoards{
+        const PawnKingInfo newPawnKingInfo{
                 .whitePawns = gameState.getPieceBitBoard(Side::White, Piece::Pawn),
                 .blackPawns = gameState.getPieceBitBoard(Side::Black, Piece::Pawn),
                 .whiteKing  = gameState.getPieceBitBoard(Side::White, Piece::King),
-                .blackKing  = gameState.getPieceBitBoard(Side::Black, Piece::King)};
+                .blackKing  = gameState.getPieceBitBoard(Side::Black, Piece::King),
+                .sideToMove = gameState.getSideToMove()};
 
-        EXPECT_EQ(pawnKingHash == newPawnKingHash, pawnKingBitBoards == newPawnKingBitBoards)
+        EXPECT_EQ(pawnKingHash == newPawnKingHash, pawnKingInfo == newPawnKingInfo)
                 << move.toAlgebraic(gameState);
 
         findPawnKingHashCollisions(gameState, depth - 1, stack);
@@ -84,6 +93,27 @@ void findPawnKingHashCollisions(
 
         const HashT undonePawnKingHash = gameState.getPawnKingHash();
         EXPECT_EQ(pawnKingHash, undonePawnKingHash) << move.toAlgebraic(gameState);
+    }
+
+    if (!gameState.isInCheck()) {
+        const auto nullMoveUnmake = gameState.makeNullMove();
+
+        const HashT newPawnKingHash = gameState.getPawnKingHash();
+        const PawnKingInfo newPawnKingInfo{
+                .whitePawns = gameState.getPieceBitBoard(Side::White, Piece::Pawn),
+                .blackPawns = gameState.getPieceBitBoard(Side::Black, Piece::Pawn),
+                .whiteKing  = gameState.getPieceBitBoard(Side::White, Piece::King),
+                .blackKing  = gameState.getPieceBitBoard(Side::Black, Piece::King),
+                .sideToMove = gameState.getSideToMove()};
+
+        EXPECT_EQ(pawnKingHash == newPawnKingHash, pawnKingInfo == newPawnKingInfo) << "null move";
+
+        findPawnKingHashCollisions(gameState, depth - 1, stack);
+
+        gameState.unmakeNullMove(nullMoveUnmake);
+
+        const HashT undonePawnKingHash = gameState.getPawnKingHash();
+        EXPECT_EQ(pawnKingHash, undonePawnKingHash) << "null move";
     }
 }
 
