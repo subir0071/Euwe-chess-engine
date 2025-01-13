@@ -1075,7 +1075,8 @@ RootSearchResult MoveSearcher::Impl::aspirationWindowSearch(
     EvalT lowerBound = toEval(initialGuess - lowerTolerance);
     EvalT upperBound = toEval(initialGuess + upperTolerance);
 
-    bool everFailedLow = false;
+    bool everFailedLow  = false;
+    bool everFailedHigh = false;
 
     EvalT lastCompletedEval = -kInfiniteEval;
 
@@ -1094,8 +1095,8 @@ RootSearchResult MoveSearcher::Impl::aspirationWindowSearch(
         if (!noEval) {
             lastCompletedEval = searchEval;
 
-            const bool failedLow = searchEval <= lowerBound;
-            everFailedLow |= failedLow;
+            everFailedLow |= searchEval <= lowerBound;
+            everFailedHigh |= searchEval >= upperBound;
         }
 
         if (wasInterrupted_) {
@@ -1147,6 +1148,10 @@ RootSearchResult MoveSearcher::Impl::aspirationWindowSearch(
                 // whichever is lower.
                 lowerBound = toEval(min(searchEval - oldTolerance, initialGuess - lowerTolerance));
             }
+
+            if (!everFailedHigh) {
+                upperBound = toEval(searchEval + 1);
+            }
         } else {
             // Failed high
             if (isMate(searchEval) && searchEval > 0) {
@@ -1161,11 +1166,21 @@ RootSearchResult MoveSearcher::Impl::aspirationWindowSearch(
                 // whichever is higher.
                 upperBound = toEval(max(searchEval + oldTolerance, initialGuess + upperTolerance));
             }
+
+            if (!everFailedLow) {
+                lowerBound = toEval(searchEval - 1);
+            }
         }
 
         if (frontEnd_) {
             frontEnd_->reportAspirationWindowReSearch(
-                    previousLowerBound, previousUpperBound, searchEval, lowerBound, upperBound);
+                    depth,
+                    previousLowerBound,
+                    previousUpperBound,
+                    searchEval,
+                    lowerBound,
+                    upperBound,
+                    getSearchStatistics());
         }
     } while (true);
 }
@@ -1228,18 +1243,6 @@ void MoveSearcher::Impl::interruptSearch() {
 }
 
 SearchStatistics MoveSearcher::Impl::getSearchStatistics() const {
-
-    //for (int side = 0; side < kNumSides; ++side) {
-    //    for (int piece = 0; piece < kNumPieceTypes; ++piece) {
-    //        for (int square = 0; square < kSquares; ++square) {
-    //            const int historyCutOff = gHistoryCutOff[side][piece][square];
-    //            const int historyUsed   = gHistoryUsed[side][piece][square];
-
-    //            std::println("{};{};{}: {} / {}", side, piece, square, historyCutOff, historyUsed);
-    //        }
-    //    }
-    //}
-
     SearchStatistics searchStatistics  = searchStatistics_;
     searchStatistics.ttableUtilization = tTable_.getUtilization();
 

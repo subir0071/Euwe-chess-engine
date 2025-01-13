@@ -69,11 +69,13 @@ class UciFrontEnd::Impl final : public IFrontEnd {
     void reportSearchStatistics(const SearchStatistics& searchStatistics) const override;
 
     void reportAspirationWindowReSearch(
+            int depth,
             EvalT previousLowerBound,
             EvalT previousUpperBound,
             EvalT searchEval,
             EvalT newLowerBound,
-            EvalT newUpperBound) const override;
+            EvalT newUpperBound,
+            const SearchStatistics& searchStatistics) const override;
 
     void reportDiscardedPv(std::string_view reason) const override;
 
@@ -216,14 +218,14 @@ void UciFrontEnd::Impl::reportFullSearch(
     const std::string pvString = pvToString(searchInfo.principalVariation);
 
     writeUci(
-            "info depth {} seldepth {} time {} nodes {}{} hashfull {}{} pv {}",
+            "info depth {} seldepth {}{} nodes {} time {}{} hashfull {} pv {}",
             searchInfo.depth,
             searchStatistics.selectiveDepth,
-            searchInfo.timeMs,
+            optionalScoreString,
             searchInfo.numNodes,
+            searchInfo.timeMs,
             optionalNpsString,
             (int)std::round(searchStatistics.ttableUtilization * 1000),
-            optionalScoreString,
             pvString);
     std::flush(out_);
 }
@@ -246,13 +248,14 @@ void UciFrontEnd::Impl::reportSearchStatistics(const SearchStatistics& searchSta
 }
 
 void UciFrontEnd::Impl::reportAspirationWindowReSearch(
+        const int depth,
         const EvalT previousLowerBound,
         const EvalT previousUpperBound,
         const EvalT searchEval,
         const EvalT newLowerBound,
-        const EvalT newUpperBound) const {
+        const EvalT newUpperBound,
+        const SearchStatistics& searchStatistics) const {
     writeDebug(
-
             "Aspiration window [{}, {}] failed (search returned {}); re-searching with window [{}, "
             "{}]",
             previousLowerBound,
@@ -260,6 +263,16 @@ void UciFrontEnd::Impl::reportAspirationWindowReSearch(
             searchEval,
             newLowerBound,
             newUpperBound);
+
+    writeUci(
+            "info depth {} seldepth {} score {} {} nodes {} hashfull {}",
+            depth,
+            searchStatistics.selectiveDepth,
+            scoreToString(searchEval),
+            searchEval <= previousLowerBound ? "upperbound" : "lowerbound",
+            searchStatistics.normalNodesSearched + searchStatistics.qNodesSearched,
+            (int)std::round(searchStatistics.ttableUtilization * 1000));
+    std::flush(out_);
 }
 
 void UciFrontEnd::Impl::reportDiscardedPv(std::string_view reason) const {
@@ -702,13 +715,21 @@ void UciFrontEnd::reportSearchStatistics(const SearchStatistics& searchStatistic
 }
 
 void UciFrontEnd::reportAspirationWindowReSearch(
+        const int depth,
         const EvalT previousLowerBound,
         const EvalT previousUpperBound,
         const EvalT searchEval,
         const EvalT newLowerBound,
-        const EvalT newUpperBound) const {
+        const EvalT newUpperBound,
+        const SearchStatistics& searchStatistics) const {
     impl_->reportAspirationWindowReSearch(
-            previousLowerBound, previousUpperBound, searchEval, newLowerBound, newUpperBound);
+            depth,
+            previousLowerBound,
+            previousUpperBound,
+            searchEval,
+            newLowerBound,
+            newUpperBound,
+            searchStatistics);
 }
 
 void UciFrontEnd::reportDiscardedPv(std::string_view reason) const {
