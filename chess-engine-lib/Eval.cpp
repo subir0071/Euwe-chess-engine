@@ -261,17 +261,34 @@ getTropism(const BoardPosition aPos, const BoardPosition bPos) {
 template <bool CalcJacobians>
 FORCE_INLINE void updateForKingTropism(
         const Evaluator::EvalCalcParams& params,
+        const std::array<std::uint8_t, kSquares>& ownKingTropisms,
+        const std::array<std::uint8_t, kSquares>& enemyKingTropisms,
+        const int pieceIdx,
+        const BoardPosition position,
+        TaperedEvaluation<CalcJacobians>& eval) {
+    const EvalCalcT ownTropism   = ownKingTropisms[(int)position];
+    const EvalCalcT enemyTropism = enemyKingTropisms[(int)position];
+
+    updateTaperedTerm(params, params.ownKingTropism[pieceIdx], eval, ownTropism);
+
+    updateTaperedTerm(params, params.enemyKingTropism[pieceIdx], eval, enemyTropism);
+}
+
+template <bool CalcJacobians>
+FORCE_INLINE void updateForKingTropism(
+        const Evaluator::EvalCalcParams& params,
         const BoardPosition ownKingPosition,
         const BoardPosition enemyKingPosition,
         const int pieceIdx,
         const BoardPosition position,
         TaperedEvaluation<CalcJacobians>& eval) {
-    const EvalCalcT ownTropism   = getTropism(ownKingPosition, position);
-    const EvalCalcT enemyTropism = getTropism(enemyKingPosition, position);
-
-    updateTaperedTerm(params, params.ownKingTropism[pieceIdx], eval, ownTropism);
-
-    updateTaperedTerm(params, params.enemyKingTropism[pieceIdx], eval, enemyTropism);
+    updateForKingTropism(
+            params,
+            kTropisms[(int)ownKingPosition],
+            kTropisms[(int)enemyKingPosition],
+            pieceIdx,
+            position,
+            eval);
 }
 
 template <bool CalcJacobians>
@@ -353,6 +370,9 @@ void evaluatePiecePositionsForSide(
 
     const int numOwnPawns = popCount(ownPawns);
 
+    const auto& ownKingTropisms   = kTropisms[(int)ownKingPosition];
+    const auto& enemyKingTropisms = kTropisms[(int)enemyKingPosition];
+
     // Knights
     {
         BitBoard pieceBitBoard = gameState.getPieceBitBoard(side, Piece::Knight);
@@ -370,9 +390,9 @@ void evaluatePiecePositionsForSide(
 
             updateForKingTropism(
                     params,
-                    ownKingPosition,
-                    enemyKingPosition,
-                    Piece::Knight,
+                    ownKingTropisms,
+                    enemyKingTropisms,
+                    (int)Piece::Knight,
                     position,
                     result.eval);
 
@@ -423,9 +443,9 @@ void evaluatePiecePositionsForSide(
 
             updateForKingTropism(
                     params,
-                    ownKingPosition,
-                    enemyKingPosition,
-                    Piece::Bishop,
+                    ownKingTropisms,
+                    enemyKingTropisms,
+                    (int)Piece::Bishop,
                     position,
                     result.eval);
 
@@ -464,7 +484,12 @@ void evaluatePiecePositionsForSide(
             }
 
             updateForKingTropism(
-                    params, ownKingPosition, enemyKingPosition, Piece::Rook, position, result.eval);
+                    params,
+                    ownKingTropisms,
+                    enemyKingTropisms,
+                    (int)Piece::Rook,
+                    position,
+                    result.eval);
 
             updateTaperedTerm(params, params.rookPawnAdjustment[numOwnPawns], result.eval, 1);
 
@@ -485,9 +510,9 @@ void evaluatePiecePositionsForSide(
 
             updateForKingTropism(
                     params,
-                    ownKingPosition,
-                    enemyKingPosition,
-                    Piece::Queen,
+                    ownKingTropisms,
+                    enemyKingTropisms,
+                    (int)Piece::Queen,
                     position,
                     result.eval);
 
