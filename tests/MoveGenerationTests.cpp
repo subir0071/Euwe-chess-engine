@@ -53,6 +53,13 @@ void compareStatistics(const MoveStatistics& actual, const ExpectedMoveStatistic
 
 void updateStatistics(
         const StackVector<Move>& moves, const GameState& gameState, MoveStatistics& statistics) {
+    const Side enemySide = nextSide(gameState.getSideToMove());
+    const BoardPosition enemyKingPosition =
+            getFirstSetPosition(gameState.getPieceBitBoard(enemySide, Piece::King));
+    const BitBoard enemyPinBitBoard = gameState.getPinBitBoard(enemySide, enemyKingPosition);
+
+    const auto directCheckBitBoards = gameState.getDirectCheckBitBoards();
+
     statistics.numMoves += moves.size();
     for (const Move move : moves) {
         statistics.numCaptures += isCapture(move);
@@ -60,7 +67,11 @@ void updateStatistics(
         statistics.numCastle += isCastle(move);
         statistics.numPromotions += isPromotion(move);
 
-        if (gameState.givesCheck(move)) {
+        const bool givesCheck = gameState.givesCheck(move, directCheckBitBoards, {});
+
+        EXPECT_EQ(givesCheck, gameState.givesCheck(move, directCheckBitBoards, enemyPinBitBoard));
+
+        if (givesCheck) {
             statistics.numChecks++;
         }
     }

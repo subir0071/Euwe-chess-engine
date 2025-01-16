@@ -477,7 +477,8 @@ GameState::UnmakeMoveInfo GameState::makeMove(const Move& move) {
 
     previousHashes_.push_back(boardHash_);
 
-    pinBitBoard_.reset();
+    pinBitBoards_[0].reset();
+    pinBitBoards_[1].reset();
 
     return unmakeInfo;
 }
@@ -507,7 +508,8 @@ GameState::UnmakeMoveInfo GameState::makeNullMove() {
 
     previousHashes_.push_back(boardHash_);
 
-    pinBitBoard_.reset();
+    pinBitBoards_[0].reset();
+    pinBitBoards_[1].reset();
 
     return unmakeInfo;
 }
@@ -531,7 +533,8 @@ void GameState::unmakeMove(const Move& move, const UnmakeMoveInfo& unmakeMoveInf
 
     boardHash_ = previousHashes_.back();
 
-    pinBitBoard_.reset();
+    pinBitBoards_[0].reset();
+    pinBitBoards_[1].reset();
 }
 
 void GameState::unmakeNullMove(const UnmakeMoveInfo& unmakeMoveInfo) {
@@ -547,13 +550,15 @@ void GameState::unmakeNullMove(const UnmakeMoveInfo& unmakeMoveInfo) {
     boardHash_ = previousHashes_.back();
     updateHashForSideToMove(pawnKingHash_);
 
-    pinBitBoard_.reset();
+    pinBitBoards_[0].reset();
+    pinBitBoards_[1].reset();
 }
 
 void GameState::removePiece(const BoardPosition position) {
     previousHashes_.clear();
     lastReversiblePositionHashIdx_ = 0;
-    pinBitBoard_.reset();
+    pinBitBoards_[0].reset();
+    pinBitBoards_[1].reset();
 
     const ColoredPiece coloredPiece = getPieceOnSquare(position);
     const Piece piece               = getPiece(coloredPiece);
@@ -874,10 +879,10 @@ void GameState::updateRookCastlingRights(BoardPosition rookPosition, Side rookSi
     }
 }
 
-FORCE_INLINE BitBoard
-GameState::getPinBitBoard(const Side kingSide, const BoardPosition kingPosition) const {
-    if (kingSide == sideToMove_ && pinBitBoard_.has_value()) {
-        return *pinBitBoard_;
+FORCE_INLINE const BitBoard& GameState::getPinBitBoard(
+        const Side kingSide, const BoardPosition kingPosition) const {
+    if (pinBitBoards_[(int)kingSide]) {
+        return *pinBitBoards_[(int)kingSide];
     }
 
     const BitBoard anyPiece = getAnyOccupancy();
@@ -928,11 +933,32 @@ GameState::getPinBitBoard(const Side kingSide, const BoardPosition kingPosition)
         }
     }
 
-    if (kingSide == sideToMove_) {
-        pinBitBoard_ = allPins;
-    }
+    pinBitBoards_[(int)kingSide] = allPins;
 
-    return allPins;
+    return *pinBitBoards_[(int)kingSide];
+}
+
+FORCE_INLINE std::array<BitBoard, kNumPieceTypes - 1> GameState::getDirectCheckBitBoards() const {
+    const BitBoard anyPiece               = getAnyOccupancy();
+    const Side enemySide                  = nextSide(sideToMove_);
+    const BitBoard enemyKingBitBoard      = getPieceBitBoard(enemySide, Piece::King);
+    const BoardPosition enemyKingPosition = getFirstSetPosition(enemyKingBitBoard);
+
+    const BitBoard directPawnChecks = getPawnControlledSquares(enemyKingBitBoard, enemySide);
+    const BitBoard directKnightChecks =
+            getPieceControlledSquares(Piece::Knight, enemyKingPosition, anyPiece);
+    const BitBoard directBishopChecks =
+            getPieceControlledSquares(Piece::Bishop, enemyKingPosition, anyPiece);
+    const BitBoard directRookChecks =
+            getPieceControlledSquares(Piece::Rook, enemyKingPosition, anyPiece);
+    const BitBoard directQueenChecks = directBishopChecks | directRookChecks;
+
+    return std::array{
+            directPawnChecks,
+            directKnightChecks,
+            directBishopChecks,
+            directRookChecks,
+            directQueenChecks};
 }
 
 bool GameState::enPassantWillPutUsInCheck() const {
@@ -1047,13 +1073,16 @@ bool GameState::isFiftyMoves() const {
     return false;
 }
 
-bool GameState::givesCheck(const Move& move) const {
+bool GameState::givesCheck(
+        const Move& move,
+        const std::array<BitBoard, kNumPieceTypes - 1>& directCheckBitBoards,
+        const std::optional<BitBoard>& enemyPinBitBoard) const {
     const BitBoard enemyKingBitBoard = getPieceBitBoard(nextSide(sideToMove_), Piece::King);
     const BitBoard occupied          = getAnyOccupancy();
 
     const Piece movedPiece = isPromotion(move.flags) ? getPromotionPiece(move) : move.pieceToMove;
 
-    BitBoard occupancyAfterMove = occupied & ~move.from | move.to;
+    BitBoard occupancyAfterMove = (occupied & ~move.from) | move.to;
     if (isEnPassant(move.flags)) {
         const BoardPosition enPassantPiecePosition =
                 getEnPassantPiecePosition(move.to, sideToMove_);
@@ -1082,30 +1111,53 @@ bool GameState::givesCheck(const Move& move) const {
         if ((movedPawnControl & enemyKingBitBoard) != BitBoard::Empty) {
             return true;
         }
-    } else {
-        const BitBoard newControl =
-                getPieceControlledSquares(movedPiece, move.to, occupancyAfterMove);
-        if ((newControl & enemyKingBitBoard) != BitBoard::Empty) {
-            return true;
+    } else if (movedPiece != Piece::King) {
+        if (isPromotion(move.flags)) {
+            // For promotions we can't use the direct check bit boards, because the pawn's old
+            // position might block the promoted piece's attack to the enemy king.
+            const BitBoard newControl =
+                    getPieceControlledSquares(movedPiece, move.to, occupancyAfterMove);
+            if ((newControl & enemyKingBitBoard) != BitBoard::Empty) {
+                return true;
+            }
+        } else {
+            const auto& pieceDirectCheckBitBoard = directCheckBitBoards[(int)movedPiece];
+            if (pieceDirectCheckBitBoard & move.to) {
+                return true;
+            }
         }
     }
 
     // Check for discovered checks
-    const BoardPosition kingPosition = getFirstSetPosition(enemyKingBitBoard);
-    const BitBoard ownQueens         = getPieceBitBoard(sideToMove_, Piece::Queen);
 
-    const BitBoard bishopAttackFromKing = getBishopAttack(kingPosition, occupancyAfterMove);
-    const BitBoard ownBishops           = getPieceBitBoard(sideToMove_, Piece::Bishop);
-    const BitBoard ownDiagonalMovers    = ownBishops | ownQueens;
-    if ((bishopAttackFromKing & ownDiagonalMovers) != BitBoard::Empty) {
-        return true;
+    bool needToCheckDiscoveredChecks = true;
+    if (enemyPinBitBoard) {
+        // If we have the pin bit board calculated, use it to check if this piece was 'pinned'
+        // (in this case, that means shielding a discovered attack).
+        // If not, moving the piece can't reveal a discovered attack, so we don't need to check for
+        // that.
+        // An en passant capture can remove two pieces from a rank in one move, so the logic doesn't
+        // work there and we always need to check those.
+        needToCheckDiscoveredChecks = (*enemyPinBitBoard & move.from) || isEnPassant(move.flags);
     }
 
-    const BitBoard rookAttackFromKing = getRookAttack(kingPosition, occupancyAfterMove);
-    const BitBoard ownRooks           = getPieceBitBoard(sideToMove_, Piece::Rook);
-    const BitBoard ownStraightMovers  = ownRooks | ownQueens;
-    if ((rookAttackFromKing & ownStraightMovers) != BitBoard::Empty) {
-        return true;
+    if (needToCheckDiscoveredChecks) {
+        const BoardPosition kingPosition = getFirstSetPosition(enemyKingBitBoard);
+        const BitBoard ownQueens         = getPieceBitBoard(sideToMove_, Piece::Queen);
+
+        const BitBoard bishopAttackFromKing = getBishopAttack(kingPosition, occupancyAfterMove);
+        const BitBoard ownBishops           = getPieceBitBoard(sideToMove_, Piece::Bishop);
+        const BitBoard ownDiagonalMovers    = ownBishops | ownQueens;
+        if ((bishopAttackFromKing & ownDiagonalMovers) != BitBoard::Empty) {
+            return true;
+        }
+
+        const BitBoard rookAttackFromKing = getRookAttack(kingPosition, occupancyAfterMove);
+        const BitBoard ownRooks           = getPieceBitBoard(sideToMove_, Piece::Rook);
+        const BitBoard ownStraightMovers  = ownRooks | ownQueens;
+        if ((rookAttackFromKing & ownStraightMovers) != BitBoard::Empty) {
+            return true;
+        }
     }
 
     return false;

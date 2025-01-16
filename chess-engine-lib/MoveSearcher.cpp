@@ -454,6 +454,12 @@ EvalT MoveSearcher::Impl::search(
     }
     EvalT eval = staticEval;
 
+    // If we just did eval, we can now get the pin bit board for free.
+    const std::optional<BitBoard> enemyPinBitBoard =
+            gameState.getCalculatedPinBitBoard(nextSide(gameState.getSideToMove()));
+
+    std::optional<std::array<BitBoard, kNumPieceTypes - 1>> directCheckBitBoards = std::nullopt;
+
     if (reverseFutilityPruningEnabled) {
         static constexpr EvalT futilityMarginPerDepth = 140;
         const int futilityValue                       = staticEval - futilityMarginPerDepth * depth;
@@ -619,7 +625,11 @@ EvalT MoveSearcher::Impl::search(
                                    - futilityMarginPerMoveSearched * movesSearched;
         const EvalT futilityValue = eval + max(futilityMargin, (EvalT)0);
         if (futilityPruningEnabled && futilityValue <= alpha && !isCaptureOrQueenPromo(move)) {
-            if (!gameState.givesCheck(move)) {
+            if (!directCheckBitBoards) {
+                directCheckBitBoards = gameState.getDirectCheckBitBoards();
+            }
+
+            if (!gameState.givesCheck(move, *directCheckBitBoards, enemyPinBitBoard)) {
                 if (futilityValue > bestScore) {
                     bestScore = futilityValue;
                     bestMove  = move;
@@ -746,6 +756,11 @@ EvalT MoveSearcher::Impl::quiesce(
 
         alpha = max(alpha, bestScore);
     }
+    // If we just did eval, we can now get the pin bit board for free.
+    const std::optional<BitBoard> enemyPinBitBoard =
+            gameState.getCalculatedPinBitBoard(nextSide(gameState.getSideToMove()));
+
+    std::optional<std::array<BitBoard, kNumPieceTypes - 1>> directCheckBitBoards = std::nullopt;
 
     std::optional<Move> hashMove = std::nullopt;
 
@@ -811,7 +826,11 @@ EvalT MoveSearcher::Impl::quiesce(
                     const EvalT deltaPruningScore = standPat + seeBound + kDeltaPruningThreshold;
                     bestScore                     = max(bestScore, deltaPruningScore);
 
-                    if (!gameState.givesCheck(*hashMove)) {
+                    if (!directCheckBitBoards) {
+                        directCheckBitBoards = gameState.getDirectCheckBitBoards();
+                    }
+
+                    if (!gameState.givesCheck(*hashMove, *directCheckBitBoards, enemyPinBitBoard)) {
                         shouldTryHashMove = false;
                     }
                 }
@@ -907,7 +926,11 @@ EvalT MoveSearcher::Impl::quiesce(
                 const EvalT deltaPruningScore = standPat + seeBound + kDeltaPruningThreshold;
                 bestScore                     = max(bestScore, deltaPruningScore);
 
-                if (!gameState.givesCheck(move)) {
+                if (!directCheckBitBoards) {
+                    directCheckBitBoards = gameState.getDirectCheckBitBoards();
+                }
+
+                if (!gameState.givesCheck(move, *directCheckBitBoards, enemyPinBitBoard)) {
                     continue;
                 }
             }

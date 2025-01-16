@@ -58,7 +58,10 @@ class GameState {
     [[nodiscard]] bool isRepetition(int repetitionThreshold = 3) const;
     [[nodiscard]] bool isFiftyMoves() const;
 
-    [[nodiscard]] bool givesCheck(const Move& move) const;
+    [[nodiscard]] bool givesCheck(
+            const Move& move,
+            const std::array<BitBoard, kNumPieceTypes - 1>& directCheckBitBoards,
+            const std::optional<BitBoard>& enemyPinBitBoard) const;
 
     [[nodiscard]] StackVector<Move> generateMoves(
             StackOfVectors<Move>& stack, bool capturesOnly = false) const;
@@ -131,7 +134,13 @@ class GameState {
         return getSideOccupancy(nextSide(sideToMove_));
     }
 
-    [[nodiscard]] BitBoard getPinBitBoard(Side kingSide, BoardPosition kingPosition) const;
+    [[nodiscard]] const BitBoard& getPinBitBoard(Side kingSide, BoardPosition kingPosition) const;
+
+    [[nodiscard]] const std::optional<BitBoard>& getCalculatedPinBitBoard(Side kingSide) const {
+        return pinBitBoards_[(int)kingSide];
+    }
+
+    [[nodiscard]] std::array<BitBoard, kNumPieceTypes - 1> getDirectCheckBitBoards() const;
 
   private:
     struct PieceIdentifier {
@@ -207,5 +216,5 @@ class GameState {
     // previousHashes_).
     int lastReversiblePositionHashIdx_ = 0;
 
-    mutable std::optional<BitBoard> pinBitBoard_ = std::nullopt;
+    mutable std::array<std::optional<BitBoard>, kNumSides> pinBitBoards_{};
 };
