@@ -510,6 +510,18 @@ int dummyRookXRays   = calculatePackedRookXRays();
 int dummyBishopAttacks = calculatePackedBishopAttacks();
 int dummyBishopXRays   = calculatePackedBishopXRays();
 
+template <typename PackedAttacksT>
+FORCE_INLINE BitBoard getSliderAttack(
+        const BoardPosition position,
+        const BitBoard occupancy,
+        const PackedAttacksT& packedAttacks,
+        const std::array<std::uint64_t, kSquares>& lookupExtractMasks) {
+    const std::uint64_t lookUpIndex =
+            pext((std::uint64_t)occupancy, lookupExtractMasks[(int)position]);
+    const std::uint16_t packedAttack = packedAttacks.entries[(int)position][lookUpIndex];
+    return (BitBoard)pdep((std::uint64_t)packedAttack, packedAttacks.depositMasks[(int)position]);
+}
+
 }  // namespace
 
 FORCE_INLINE BitBoard getPawnControlledSquares(const BitBoard pawnBitBoard, const Side side) {
@@ -533,37 +545,19 @@ BitBoard getKingControlledSquares(const BoardPosition position) {
 }
 
 FORCE_INLINE BitBoard getRookAttack(const BoardPosition position, const BitBoard occupancy) {
-    const std::uint64_t lookUpIndex =
-            pext((std::uint64_t)occupancy, gRookLookupExtractMasks[(int)position]);
-    const std::uint16_t packedRookAttacks = gPackedRookAttacks.entries[(int)position][lookUpIndex];
-    return (BitBoard)pdep(
-            (std::uint64_t)packedRookAttacks, gPackedRookAttacks.depositMasks[(int)position]);
+    return getSliderAttack(position, occupancy, gPackedRookAttacks, gRookLookupExtractMasks);
 }
 
 FORCE_INLINE BitBoard getRookXRay(const BoardPosition position, const BitBoard occupancy) {
-    const std::uint64_t lookUpIndex =
-            pext((std::uint64_t)occupancy, gRookLookupExtractMasks[(int)position]);
-    const std::uint16_t packedRookAttacks = gPackedRookXRays.entries[(int)position][lookUpIndex];
-    return (BitBoard)pdep(
-            (std::uint64_t)packedRookAttacks, gPackedRookXRays.depositMasks[(int)position]);
+    return getSliderAttack(position, occupancy, gPackedRookXRays, gRookLookupExtractMasks);
 }
 
 FORCE_INLINE BitBoard getBishopAttack(const BoardPosition position, const BitBoard occupancy) {
-    const std::uint64_t lookUpIndex =
-            pext((std::uint64_t)occupancy, gBishopLookupExtractMasks[(int)position]);
-    const std::uint16_t packedBishopAttacks =
-            gPackedBishopAttacks.entries[(int)position][lookUpIndex];
-    return (BitBoard)pdep(
-            (std::uint64_t)packedBishopAttacks, gPackedBishopAttacks.depositMasks[(int)position]);
+    return getSliderAttack(position, occupancy, gPackedBishopAttacks, gBishopLookupExtractMasks);
 }
 
 FORCE_INLINE BitBoard getBishopXRay(const BoardPosition position, const BitBoard occupancy) {
-    const std::uint64_t lookUpIndex =
-            pext((std::uint64_t)occupancy, gBishopLookupExtractMasks[(int)position]);
-    const std::uint16_t packedBishopAttacks =
-            gPackedBishopXRays.entries[(int)position][lookUpIndex];
-    return (BitBoard)pdep(
-            (std::uint64_t)packedBishopAttacks, gPackedBishopXRays.depositMasks[(int)position]);
+    return getSliderAttack(position, occupancy, gPackedBishopXRays, gBishopLookupExtractMasks);
 }
 
 FORCE_INLINE std::uint64_t getFullRay(
