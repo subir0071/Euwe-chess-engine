@@ -460,7 +460,7 @@ GameState::UnmakeMoveInfo GameState::makeMove(const Move& move) {
             .plySinceCaptureOrPawn         = plySinceCaptureOrPawn_,
             .lastReversiblePositionHashIdx = lastReversiblePositionHashIdx_};
 
-    if (isCastle(move.flags)) {
+    if (isCastle(move)) {
         makeCastleMove(move);
     } else {
         unmakeInfo.capturedPiece = makeSinglePieceMove(move);
@@ -525,7 +525,7 @@ void GameState::unmakeMove(const Move& move, const UnmakeMoveInfo& unmakeMoveInf
     lastReversiblePositionHashIdx_ = unmakeMoveInfo.lastReversiblePositionHashIdx;
     previousHashes_.pop_back();
 
-    if (isCastle(move.flags)) {
+    if (isCastle(move)) {
         makeCastleMove(move, /*reverse*/ true);
     } else {
         unmakeSinglePieceMove(move, unmakeMoveInfo);
@@ -666,7 +666,7 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
     Piece capturedPiece               = Piece::Invalid;
     BoardPosition captureTargetSquare = move.to;
 
-    if (isEnPassant(move.flags)) {
+    if (isEnPassant(move)) {
         MY_ASSERT(isCapture(move));
         MY_ASSERT(move.to == enPassantTarget_);
 
@@ -728,7 +728,7 @@ Piece GameState::makeSinglePieceMove(const Move& move) {
 
     // pawnKingHash_ updated in handlePawnMove or handleNormalKingMove
 
-    if (isEnPassant(move.flags)) {
+    if (isEnPassant(move)) {
         getPieceOnSquareMut(captureTargetSquare) = ColoredPiece::Invalid;
     }
 
@@ -782,7 +782,7 @@ void GameState::unmakeSinglePieceMove(const Move& move, const UnmakeMoveInfo& un
 
         BoardPosition captureTarget = move.to;
 
-        if (isEnPassant(move.flags)) {
+        if (isEnPassant(move)) {
             const auto [fromFile, fromRank] = fileRankFromPosition(move.from);
             const auto [toFile, toRank]     = fileRankFromPosition(move.to);
             captureTarget                   = positionFromFileRank(toFile, fromRank);
@@ -795,7 +795,7 @@ void GameState::unmakeSinglePieceMove(const Move& move, const UnmakeMoveInfo& un
 
         getPieceOnSquareMut(captureTarget) =
                 getColoredPiece(unmakeMoveInfo.capturedPiece, nextSide(sideToMove_));
-        if (isEnPassant(move.flags)) {
+        if (isEnPassant(move)) {
             getPieceOnSquareMut(move.to) = ColoredPiece::Invalid;
         }
 
@@ -877,6 +877,11 @@ void GameState::updateRookCastlingRights(BoardPosition rookPosition, Side rookSi
         setCanCastleKingSide(rookSide, false);
         updateHashForKingSideCastlingRights(rookSide, boardHash_);
     }
+}
+
+FORCE_INLINE const BitBoard& GameState::getPinBitBoard(const Side kingSide) const {
+    const BoardPosition kingPosition = getFirstSetPosition(getPieceBitBoard(kingSide, Piece::King));
+    return getPinBitBoard(kingSide, kingPosition);
 }
 
 FORCE_INLINE const BitBoard& GameState::getPinBitBoard(
@@ -1077,20 +1082,39 @@ bool GameState::givesCheck(
         const Move& move,
         const std::array<BitBoard, kNumPieceTypes - 1>& directCheckBitBoards,
         const std::optional<BitBoard>& enemyPinBitBoard) const {
+    if (move.pieceToMove != Piece::King && !isPromotion(move)) {
+        const auto& pieceDirectCheckBitBoard = directCheckBitBoards[(int)move.pieceToMove];
+        if (pieceDirectCheckBitBoard & move.to) {
+            return true;
+        }
+    }
+
+    bool needToCheckDiscoveredChecks = true;
+    if (enemyPinBitBoard) {
+        // If we have the pin bit board calculated, use it to check if this piece was 'pinned'
+        // (in this case, that means shielding a discovered attack).
+        // If not, moving the piece can't reveal a discovered attack, so we don't need to check for
+        // that.
+        // An en passant capture can remove two pieces from a rank in one move, so the logic doesn't
+        // work there and we always need to check those.
+        needToCheckDiscoveredChecks = (*enemyPinBitBoard & move.from) || isEnPassant(move);
+    }
+
+    const bool isSpecialMove = isCastle(move) || isPromotion(move);
+
+    if (!needToCheckDiscoveredChecks && !isSpecialMove) {
+        return false;
+    }
+
     const BitBoard enemyKingBitBoard = getPieceBitBoard(nextSide(sideToMove_), Piece::King);
     const BitBoard occupied          = getAnyOccupancy();
 
-    const Piece movedPiece = isPromotion(move.flags) ? getPromotionPiece(move) : move.pieceToMove;
+    const Piece movedPiece = isPromotion(move) ? getPromotionPiece(move) : move.pieceToMove;
 
     BitBoard occupancyAfterMove = (occupied & ~move.from) | move.to;
-    if (isEnPassant(move.flags)) {
-        const BoardPosition enPassantPiecePosition =
-                getEnPassantPiecePosition(move.to, sideToMove_);
-        occupancyAfterMove &= ~enPassantPiecePosition;
-    }
 
-    // Check for direct attacks
-    if (isCastle(move.flags)) {
+    // Check for direct attacks from special moves
+    if (isCastle(move)) {
         const auto [kingFromFile, kingFromRank] = fileRankFromPosition(move.from);
 
         const auto [kingToFile, kingToRank] = fileRankFromPosition(move.to);
@@ -1105,43 +1129,24 @@ bool GameState::givesCheck(
 
         // Castling can't give a discovered check
         return false;
-    } else if (movedPiece == Piece::Pawn) {
-        const BitBoard newPositionBB    = BitBoard::Empty | move.to;
-        const BitBoard movedPawnControl = getPawnControlledSquares(newPositionBB, sideToMove_);
-        if ((movedPawnControl & enemyKingBitBoard) != BitBoard::Empty) {
+    } else if (isPromotion(move)) {
+        // For promotions we can't use the direct check bit boards, because the pawn's old
+        // position might block the promoted piece's attack to the enemy king.
+        const BitBoard newControl =
+                getPieceControlledSquares(movedPiece, move.to, occupancyAfterMove);
+        if ((newControl & enemyKingBitBoard) != BitBoard::Empty) {
             return true;
-        }
-    } else if (movedPiece != Piece::King) {
-        if (isPromotion(move.flags)) {
-            // For promotions we can't use the direct check bit boards, because the pawn's old
-            // position might block the promoted piece's attack to the enemy king.
-            const BitBoard newControl =
-                    getPieceControlledSquares(movedPiece, move.to, occupancyAfterMove);
-            if ((newControl & enemyKingBitBoard) != BitBoard::Empty) {
-                return true;
-            }
-        } else {
-            const auto& pieceDirectCheckBitBoard = directCheckBitBoards[(int)movedPiece];
-            if (pieceDirectCheckBitBoard & move.to) {
-                return true;
-            }
         }
     }
 
     // Check for discovered checks
-
-    bool needToCheckDiscoveredChecks = true;
-    if (enemyPinBitBoard) {
-        // If we have the pin bit board calculated, use it to check if this piece was 'pinned'
-        // (in this case, that means shielding a discovered attack).
-        // If not, moving the piece can't reveal a discovered attack, so we don't need to check for
-        // that.
-        // An en passant capture can remove two pieces from a rank in one move, so the logic doesn't
-        // work there and we always need to check those.
-        needToCheckDiscoveredChecks = (*enemyPinBitBoard & move.from) || isEnPassant(move.flags);
-    }
-
     if (needToCheckDiscoveredChecks) {
+        if (isEnPassant(move)) {
+            const BoardPosition enPassantPiecePosition =
+                    getEnPassantPiecePosition(move.to, sideToMove_);
+            occupancyAfterMove &= ~enPassantPiecePosition;
+        }
+
         const BoardPosition kingPosition = getFirstSetPosition(enemyKingBitBoard);
         const BitBoard ownQueens         = getPieceBitBoard(sideToMove_, Piece::Queen);
 

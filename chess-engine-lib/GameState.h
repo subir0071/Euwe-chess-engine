@@ -134,6 +134,8 @@ class GameState {
         return getSideOccupancy(nextSide(sideToMove_));
     }
 
+    [[nodiscard]] const BitBoard& getPinBitBoard(Side kingSide) const;
+
     [[nodiscard]] const BitBoard& getPinBitBoard(Side kingSide, BoardPosition kingPosition) const;
 
     [[nodiscard]] const std::optional<BitBoard>& getCalculatedPinBitBoard(Side kingSide) const {
