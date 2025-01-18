@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "drag-aspiration-window");
+            UciFrontEnd uciFrontEnd(engine, "scale-null-move-reduction");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

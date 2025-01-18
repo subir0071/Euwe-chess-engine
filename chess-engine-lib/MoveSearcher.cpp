@@ -470,9 +470,9 @@ EvalT MoveSearcher::Impl::search(
         }
     }
 
-    constexpr int kNullMoveReduction = 3;
     if (nullMovePruningAllowed(gameState, isPvNode, beta, isInCheck, depth, ply, lastNullMovePly)) {
-        const int nullMoveSearchDepth = max(1, depth - kNullMoveReduction - 1);
+        const int nullMoveReduction   = max(3, depth / 2);
+        const int nullMoveSearchDepth = max(1, depth - nullMoveReduction - 1);
 
         const auto unmakeInfo = gameState.makeNullMove();
 
