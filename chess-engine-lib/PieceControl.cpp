@@ -85,7 +85,7 @@ constexpr std::array<std::uint64_t, kSquares> getFullRays() {
         for (int rank = 0; rank < kRanks; ++rank) {
             const BoardPosition position    = positionFromFileRank(file, rank);
             const std::uint64_t positionBit = 1ULL << (int)position;
-            rays[(int)position] = fillRayWithMask<N, directionMask>(positionBit, allMask);
+            rays[(int)position] = fillRayWithMask<N, directionMask>(positionBit, kAllMask);
             rays[(int)position] |= positionBit;
         }
     }
@@ -107,40 +107,40 @@ constexpr std::array<std::array<std::array<std::uint64_t, kSquares>, 3>, 3> kFul
         // file -1 (west)
         std::array<std::array<std::uint64_t, kSquares>, 3>{
                 // rank -1 (south west)
-                std::array<std::uint64_t, kSquares>{getFullRays<kSouthWest, notEastFileMask>()},
+                std::array<std::uint64_t, kSquares>{getFullRays<kSouthWest, kNotEastFileMask>()},
                 // rank 0 (west)
-                std::array<std::uint64_t, kSquares>{getFullRays<kWest, notEastFileMask>()},
+                std::array<std::uint64_t, kSquares>{getFullRays<kWest, kNotEastFileMask>()},
                 // rank 1 (north west)
-                std::array<std::uint64_t, kSquares>{getFullRays<kNorthWest, notEastFileMask>()}},
+                std::array<std::uint64_t, kSquares>{getFullRays<kNorthWest, kNotEastFileMask>()}},
         // file 0
         std::array<std::array<std::uint64_t, kSquares>, 3>{
                 // rank -1 (south)
-                std::array<std::uint64_t, kSquares>{getFullRays<kSouth, allMask>()},
+                std::array<std::uint64_t, kSquares>{getFullRays<kSouth, kAllMask>()},
                 // rank 0 (stationary)
                 std::array<std::uint64_t, kSquares>{},
                 // rank 1 (north)
-                std::array<std::uint64_t, kSquares>{getFullRays<kNorth, allMask>()}},
+                std::array<std::uint64_t, kSquares>{getFullRays<kNorth, kAllMask>()}},
         // file 1 (east)
         std::array<std::array<std::uint64_t, kSquares>, 3>{
                 // rank -1 (south east)
-                std::array<std::uint64_t, kSquares>{getFullRays<kSouthEast, notWestFileMask>()},
+                std::array<std::uint64_t, kSquares>{getFullRays<kSouthEast, kNotWestFileMask>()},
                 // rank 0 (east)
-                std::array<std::uint64_t, kSquares>{getFullRays<kEast, notWestFileMask>()},
+                std::array<std::uint64_t, kSquares>{getFullRays<kEast, kNotWestFileMask>()},
                 // rank 1 (north east)
-                std::array<std::uint64_t, kSquares>{getFullRays<kNorthEast, notWestFileMask>()}}};
+                std::array<std::uint64_t, kSquares>{getFullRays<kNorthEast, kNotWestFileMask>()}}};
 
 BitBoard computeBishopControlledSquares(const BoardPosition origin, const BitBoard anyPiece) {
     const std::uint64_t originBitBoard    = 1ULL << (int)origin;
     const std::uint64_t notOtherPieceMask = ~((std::uint64_t)anyPiece);
 
     const std::uint64_t northEastControlledSquares =
-            fillRayWithMask<9, notWestFileMask>(originBitBoard, notOtherPieceMask);
+            fillRayWithMask<9, kNotWestFileMask>(originBitBoard, notOtherPieceMask);
     const std::uint64_t southEastControlledSquares =
-            fillRayWithMask<-7, notWestFileMask>(originBitBoard, notOtherPieceMask);
+            fillRayWithMask<-7, kNotWestFileMask>(originBitBoard, notOtherPieceMask);
     const std::uint64_t southWestControlledSquares =
-            fillRayWithMask<-9, notEastFileMask>(originBitBoard, notOtherPieceMask);
+            fillRayWithMask<-9, kNotEastFileMask>(originBitBoard, notOtherPieceMask);
     const std::uint64_t northWestControlledSquares =
-            fillRayWithMask<7, notEastFileMask>(originBitBoard, notOtherPieceMask);
+            fillRayWithMask<7, kNotEastFileMask>(originBitBoard, notOtherPieceMask);
 
     return (BitBoard)(northEastControlledSquares | southEastControlledSquares
                       | southWestControlledSquares | northWestControlledSquares);
@@ -168,13 +168,13 @@ BitBoard computeBishopXRaySquares(const BoardPosition origin, BitBoard anyPiece)
     const std::uint64_t notBlockingPieceMask = ~((std::uint64_t)anyPiece);
 
     const std::uint64_t northEastXRay =
-            fillRayWithMask<9, notWestFileMask>(originBitBoard, notBlockingPieceMask);
+            fillRayWithMask<9, kNotWestFileMask>(originBitBoard, notBlockingPieceMask);
     const std::uint64_t southEastXRay =
-            fillRayWithMask<-7, notWestFileMask>(originBitBoard, notBlockingPieceMask);
+            fillRayWithMask<-7, kNotWestFileMask>(originBitBoard, notBlockingPieceMask);
     const std::uint64_t southWestXRay =
-            fillRayWithMask<-9, notEastFileMask>(originBitBoard, notBlockingPieceMask);
+            fillRayWithMask<-9, kNotEastFileMask>(originBitBoard, notBlockingPieceMask);
     const std::uint64_t northWestXRay =
-            fillRayWithMask<7, notEastFileMask>(originBitBoard, notBlockingPieceMask);
+            fillRayWithMask<7, kNotEastFileMask>(originBitBoard, notBlockingPieceMask);
 
     const std::uint64_t originBit = 1ULL << (int)origin;
 
@@ -188,11 +188,11 @@ BitBoard computeRookControlledSquares(const BoardPosition origin, const BitBoard
     const std::uint64_t northControlledSquares =
             fillRayNoMask<8>(originBitBoard, notOtherPieceMask);
     const std::uint64_t eastControlledSquares =
-            fillRayWithMask<1, notWestFileMask>(originBitBoard, notOtherPieceMask);
+            fillRayWithMask<1, kNotWestFileMask>(originBitBoard, notOtherPieceMask);
     const std::uint64_t southControlledSquares =
             fillRayNoMask<-8>(originBitBoard, notOtherPieceMask);
     const std::uint64_t westControlledSquares =
-            fillRayWithMask<-1, notEastFileMask>(originBitBoard, notOtherPieceMask);
+            fillRayWithMask<-1, kNotEastFileMask>(originBitBoard, notOtherPieceMask);
 
     return (BitBoard)(northControlledSquares | eastControlledSquares | southControlledSquares
                       | westControlledSquares);
@@ -221,10 +221,10 @@ BitBoard computeRookXRaySquares(const BoardPosition origin, BitBoard anyPiece) {
 
     const std::uint64_t northXRay = fillRayNoMask<8>(originBitBoard, notBlockingPieceMask);
     const std::uint64_t eastXRay =
-            fillRayWithMask<1, notWestFileMask>(originBitBoard, notBlockingPieceMask);
+            fillRayWithMask<1, kNotWestFileMask>(originBitBoard, notBlockingPieceMask);
     const std::uint64_t southXRay = fillRayNoMask<-8>(originBitBoard, notBlockingPieceMask);
     const std::uint64_t westXRay =
-            fillRayWithMask<-1, notEastFileMask>(originBitBoard, notBlockingPieceMask);
+            fillRayWithMask<-1, kNotEastFileMask>(originBitBoard, notBlockingPieceMask);
 
     const std::uint64_t originBit = 1ULL << (int)origin;
 
@@ -302,16 +302,16 @@ int calculatePackedRookAttacks() {
 
         std::uint64_t lookUpMask = fullSight;
         if (file > 0) {
-            lookUpMask &= notWestFileMask;
+            lookUpMask &= kNotWestFileMask;
         }
         if (file < 7) {
-            lookUpMask &= notEastFileMask;
+            lookUpMask &= kNotEastFileMask;
         }
         if (rank > 0) {
-            lookUpMask &= notSouthRankMask;
+            lookUpMask &= kNotSouthRankMask;
         }
         if (rank < 7) {
-            lookUpMask &= notNorthRankMask;
+            lookUpMask &= kNotNorthRankMask;
         }
         gRookLookupExtractMasks[square] = lookUpMask;
 
@@ -357,16 +357,16 @@ int calculatePackedRookXRays() {
 
         std::uint64_t lookUpMask = fullSight & ~squareBit;
         if (file > 0) {
-            lookUpMask &= notWestFileMask;
+            lookUpMask &= kNotWestFileMask;
         }
         if (file < 7) {
-            lookUpMask &= notEastFileMask;
+            lookUpMask &= kNotEastFileMask;
         }
         if (rank > 0) {
-            lookUpMask &= notSouthRankMask;
+            lookUpMask &= kNotSouthRankMask;
         }
         if (rank < 7) {
-            lookUpMask &= notNorthRankMask;
+            lookUpMask &= kNotNorthRankMask;
         }
         gRookLookupExtractMasks[square] = lookUpMask;
 
@@ -413,16 +413,16 @@ int calculatePackedBishopAttacks() {
 
         std::uint64_t lookUpMask = fullSight;
         if (file > 0) {
-            lookUpMask &= notWestFileMask;
+            lookUpMask &= kNotWestFileMask;
         }
         if (file < 7) {
-            lookUpMask &= notEastFileMask;
+            lookUpMask &= kNotEastFileMask;
         }
         if (rank > 0) {
-            lookUpMask &= notSouthRankMask;
+            lookUpMask &= kNotSouthRankMask;
         }
         if (rank < 7) {
-            lookUpMask &= notNorthRankMask;
+            lookUpMask &= kNotNorthRankMask;
         }
         gBishopLookupExtractMasks[square] = lookUpMask;
 
@@ -468,16 +468,16 @@ int calculatePackedBishopXRays() {
 
         std::uint64_t lookUpMask = fullSight & ~squareBit;
         if (file > 0) {
-            lookUpMask &= notWestFileMask;
+            lookUpMask &= kNotWestFileMask;
         }
         if (file < 7) {
-            lookUpMask &= notEastFileMask;
+            lookUpMask &= kNotEastFileMask;
         }
         if (rank > 0) {
-            lookUpMask &= notSouthRankMask;
+            lookUpMask &= kNotSouthRankMask;
         }
         if (rank < 7) {
-            lookUpMask &= notNorthRankMask;
+            lookUpMask &= kNotNorthRankMask;
         }
         gBishopLookupExtractMasks[square] = lookUpMask;
 
@@ -530,12 +530,12 @@ FORCE_INLINE BitBoard getPawnControlledSquares(const BoardPosition position, con
 
 FORCE_INLINE BitBoard getPawnControlledSquares(const BitBoard pawnBitBoard, const Side side) {
     auto leftForwardShift = [=](const BitBoard bitBoard) FORCE_INLINE {
-        return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & notWestFileMask) << 7)
-                                   : (BitBoard)(((std::uint64_t)bitBoard & notWestFileMask) >> 9);
+        return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & kNotWestFileMask) << 7)
+                                   : (BitBoard)(((std::uint64_t)bitBoard & kNotWestFileMask) >> 9);
     };
     auto rightForwardShift = [=](const BitBoard bitBoard) FORCE_INLINE {
-        return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & notEastFileMask) << 9)
-                                   : (BitBoard)(((std::uint64_t)bitBoard & notEastFileMask) >> 7);
+        return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & kNotEastFileMask) << 9)
+                                   : (BitBoard)(((std::uint64_t)bitBoard & kNotEastFileMask) >> 7);
     };
 
     const BitBoard leftCaptures  = leftForwardShift(pawnBitBoard);

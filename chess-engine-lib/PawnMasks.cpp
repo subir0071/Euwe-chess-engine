@@ -11,7 +11,7 @@ namespace {
         return 0ULL;
     }
 
-    return allMask << ((rank + 1) * 8);
+    return kAllMask << ((rank + 1) * 8);
 }
 
 [[nodiscard]] constexpr std::uint64_t computeBlackForwardField(const int rank) {
@@ -19,11 +19,11 @@ namespace {
         return 0ULL;
     }
 
-    return allMask >> ((8 - rank) * 8);
+    return kAllMask >> ((8 - rank) * 8);
 }
 
 [[nodiscard]] constexpr std::uint64_t computeFileMask(const int file) {
-    const std::uint64_t fileMask = westFileMask << file;
+    const std::uint64_t fileMask = kWestFileMask << file;
     return fileMask;
 }
 
@@ -67,9 +67,9 @@ constexpr std::array<std::array<BitBoard, kSquares>, kNumSides> kForwardMasks = 
 };
 
 [[nodiscard]] constexpr std::uint64_t computeTripleFileMask(const int file) {
-    const std::uint64_t fileMask      = westFileMask << file;
-    const std::uint64_t fileMaskLeft  = westFileMask << std::max(0, file - 1);
-    const std::uint64_t fileMaskRight = westFileMask << std::min(7, file + 1);
+    const std::uint64_t fileMask      = kWestFileMask << file;
+    const std::uint64_t fileMaskLeft  = kWestFileMask << std::max(0, file - 1);
+    const std::uint64_t fileMaskRight = kWestFileMask << std::min(7, file + 1);
     return fileMask | fileMaskLeft | fileMaskRight;
 }
 

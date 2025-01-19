@@ -88,17 +88,22 @@ constexpr BoardPosition popFirstSetPosition(BitBoard& bitBoard) {
     return std::popcount((std::uint64_t)bitBoard);
 }
 
-inline constexpr std::uint64_t northRankMask = 0xffULL << (7 * 8);
-inline constexpr std::uint64_t westFileMask  = 0x0101010101010101ULL;
-inline constexpr std::uint64_t southRankMask = 0xffULL;
-inline constexpr std::uint64_t eastFileMask  = 0x8080808080808080ULL;
+inline constexpr std::uint64_t kNorthRankMask = 0xffULL << (7 * 8);
+inline constexpr std::uint64_t kWestFileMask  = 0x0101010101010101ULL;
+inline constexpr std::uint64_t kSouthRankMask = 0xffULL;
+inline constexpr std::uint64_t kEastFileMask  = 0x8080808080808080ULL;
 
-inline constexpr std::uint64_t notNorthRankMask = ~northRankMask;
-inline constexpr std::uint64_t notWestFileMask  = ~westFileMask;
-inline constexpr std::uint64_t notSouthRankMask = ~southRankMask;
-inline constexpr std::uint64_t notEastFileMask  = ~eastFileMask;
+inline constexpr std::uint64_t kNotNorthRankMask = ~kNorthRankMask;
+inline constexpr std::uint64_t kNotWestFileMask  = ~kWestFileMask;
+inline constexpr std::uint64_t kNotSouthRankMask = ~kSouthRankMask;
+inline constexpr std::uint64_t kNotEastFileMask  = ~kEastFileMask;
 
-inline constexpr std::uint64_t allMask = ~0ULL;
+inline constexpr std::uint64_t kAllMask = ~0ULL;
+
+inline constexpr BitBoard kNotNorthRankBb = (BitBoard)kNotNorthRankMask;
+inline constexpr BitBoard kNotWestFileBb  = (BitBoard)kNotWestFileMask;
+inline constexpr BitBoard kNotSouthRankBb = (BitBoard)kNotSouthRankMask;
+inline constexpr BitBoard kNotEastFileBb  = (BitBoard)kNotEastFileMask;
 
 inline constexpr BitBoard kDarkSquareBitBoard  = (BitBoard)0xaa55aa55aa55aa55ULL;
 inline constexpr BitBoard kLightSquareBitBoard = (BitBoard)~0xaa55aa55aa55aa55ULL;

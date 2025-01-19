@@ -10,7 +10,7 @@ namespace {
 
 constexpr BitBoard computeFileBitBoard(const BoardPosition position) {
     const int file = fileFromPosition(position);
-    return (BitBoard)(westFileMask << file);
+    return (BitBoard)(kWestFileMask << file);
 }
 
 constexpr std::array<BitBoard, kSquares> kFileBitBoards = []() {

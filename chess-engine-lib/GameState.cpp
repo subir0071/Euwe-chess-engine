@@ -34,12 +34,12 @@ void generatePawnMoves(
                                    : (BitBoard)((std::uint64_t)bitBoard >> 8);
     };
     auto leftForwardShift = [=](const BitBoard bitBoard) FORCE_INLINE {
-        return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & notWestFileMask) << 7)
-                                   : (BitBoard)(((std::uint64_t)bitBoard & notWestFileMask) >> 9);
+        return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & kNotWestFileMask) << 7)
+                                   : (BitBoard)(((std::uint64_t)bitBoard & kNotWestFileMask) >> 9);
     };
     auto rightForwardShift = [=](const BitBoard bitBoard) FORCE_INLINE {
-        return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & notEastFileMask) << 9)
-                                   : (BitBoard)(((std::uint64_t)bitBoard & notEastFileMask) >> 7);
+        return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & kNotEastFileMask) << 9)
+                                   : (BitBoard)(((std::uint64_t)bitBoard & kNotEastFileMask) >> 7);
     };
 
     const BitBoard anyPiece = occupancy[0] | occupancy[1];
