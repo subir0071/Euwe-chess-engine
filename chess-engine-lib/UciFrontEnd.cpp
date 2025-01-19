@@ -238,10 +238,12 @@ void UciFrontEnd::Impl::reportPartialSearch(const SearchInfo& searchInfo) const 
 }
 
 void UciFrontEnd::Impl::reportSearchStatistics(const SearchStatistics& searchStatistics) const {
-    writeDebug("Normal nodes searched: {}", searchStatistics.normalNodesSearched);
-    writeDebug("Quiescence nodes searched: {}", searchStatistics.qNodesSearched);
-    writeDebug("TTable hits: {}", searchStatistics.tTableHits);
-    writeDebug("TTable utilization: {:.1f}%", searchStatistics.ttableUtilization * 100.f);
+    if (debugMode_) {
+        writeDebug("Normal nodes searched: {}", searchStatistics.normalNodesSearched);
+        writeDebug("Quiescence nodes searched: {}", searchStatistics.qNodesSearched);
+        writeDebug("TTable hits: {}", searchStatistics.tTableHits);
+        writeDebug("TTable utilization: {:.1f}%", searchStatistics.ttableUtilization * 100.f);
+    }
 }
 
 void UciFrontEnd::Impl::reportAspirationWindowReSearch(
@@ -252,14 +254,17 @@ void UciFrontEnd::Impl::reportAspirationWindowReSearch(
         const EvalT newLowerBound,
         const EvalT newUpperBound,
         const SearchStatistics& searchStatistics) const {
-    writeDebug(
-            "Aspiration window [{}, {}] failed (search returned {}); re-searching with window [{}, "
-            "{}]",
-            previousLowerBound,
-            previousUpperBound,
-            searchEval,
-            newLowerBound,
-            newUpperBound);
+    if (debugMode_) {
+        writeDebug(
+                "Aspiration window [{}, {}] failed (search returned {}); re-searching with window "
+                "[{}, "
+                "{}]",
+                previousLowerBound,
+                previousUpperBound,
+                searchEval,
+                newLowerBound,
+                newUpperBound);
+    }
 
     std::string optionalNpsString = "";
     if (searchStatistics.timeElapsed.count() > 0) {
