@@ -19,8 +19,8 @@
 
 namespace {
 
-std::string pvToString(const std::vector<Move>& principalVariation) {
-    return principalVariation | std::views::transform(&Move::toUci) | std::views::join_with(' ')
+std::string moveListToString(const std::vector<Move>& moves) {
+    return moves | std::views::transform(&Move::toUci) | std::views::join_with(' ')
          | std::ranges::to<std::string>();
 }
 
@@ -91,7 +91,9 @@ class UciFrontEnd::Impl final : public IFrontEnd {
     void handleRegister() const;
     void handleSetOption(const std::string& line);
 
+    // Non-UCI commands
     void handleEval();
+    void handleListMoves();
 
     void stopSearchIfNeeded();
 
@@ -191,6 +193,8 @@ void UciFrontEnd::Impl::run() {
             handleSetOption(inputLine);
         } else if (command == "eval") {
             handleEval();
+        } else if (command == "listmoves") {
+            handleListMoves();
         } else if (command.empty()) {
             continue;
         } else {
@@ -213,7 +217,7 @@ void UciFrontEnd::Impl::reportFullSearch(const SearchInfo& searchInfo) const {
                 std::format(" nps {}", (int)std::round(searchInfo.statistics.nodesPerSecond));
     }
 
-    const std::string pvString = pvToString(searchInfo.principalVariation);
+    const std::string pvString = moveListToString(searchInfo.principalVariation);
 
     writeUci(
             "info depth {} seldepth {}{} nodes {} time {}{} hashfull {} pv {}",
@@ -569,6 +573,13 @@ void UciFrontEnd::Impl::handleEval() {
     StackOfVectors<Move> stack;
     const EvalT eval = engine_.evaluate(gameState_);
     writeDebug("Eval: {:+}", (float)eval / 100);
+}
+
+void UciFrontEnd::Impl::handleListMoves() {
+    StackOfVectors<Move> stack;
+    const auto moves = gameState_.generateMoves(stack);
+    std::vector<Move> movesVector(moves.begin(), moves.end());
+    writeDebug("Moves: {}", moveListToString(movesVector));
 }
 
 void UciFrontEnd::Impl::stopSearchIfNeeded() {
