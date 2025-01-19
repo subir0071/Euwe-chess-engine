@@ -211,6 +211,11 @@ void UciFrontEnd::Impl::reportFullSearch(const SearchInfo& searchInfo) const {
         optionalScoreString = std::format(" score {}", scoreToString(searchInfo.score));
     }
 
+    std::string optionalTbHitsString = "";
+    if (searchInfo.statistics.tbHits) {
+        optionalTbHitsString = std::format(" tbhits {}", *searchInfo.statistics.tbHits);
+    }
+
     std::string optionalNpsString = "";
     if (searchInfo.statistics.timeElapsed.count() > 0) {
         optionalNpsString =
@@ -220,11 +225,12 @@ void UciFrontEnd::Impl::reportFullSearch(const SearchInfo& searchInfo) const {
     const std::string pvString = moveListToString(searchInfo.principalVariation);
 
     writeUci(
-            "info depth {} seldepth {}{} nodes {} time {}{} hashfull {} pv {}",
+            "info depth {} seldepth {}{} nodes {}{} time {}{} hashfull {} pv {}",
             searchInfo.depth,
             searchInfo.statistics.selectiveDepth,
             optionalScoreString,
             searchInfo.statistics.normalNodesSearched + searchInfo.statistics.qNodesSearched,
+            optionalTbHitsString,
             searchInfo.statistics.timeElapsed.count(),
             optionalNpsString,
             (int)std::round(searchInfo.statistics.ttableUtilization * 1000),
@@ -260,7 +266,8 @@ void UciFrontEnd::Impl::reportAspirationWindowReSearch(
         const SearchStatistics& searchStatistics) const {
     if (debugMode_) {
         writeDebug(
-                "Aspiration window [{}, {}] failed (search returned {}); re-searching with window "
+                "Aspiration window [{}, {}] failed (search returned {}); re-searching with "
+                "window "
                 "[{}, "
                 "{}]",
                 previousLowerBound,
@@ -270,6 +277,11 @@ void UciFrontEnd::Impl::reportAspirationWindowReSearch(
                 newUpperBound);
     }
 
+    std::string optionalTbHitsString = "";
+    if (searchStatistics.tbHits) {
+        optionalTbHitsString = std::format(" tbhits {}", *searchStatistics.tbHits);
+    }
+
     std::string optionalNpsString = "";
     if (searchStatistics.timeElapsed.count() > 0) {
         optionalNpsString =
@@ -277,12 +289,13 @@ void UciFrontEnd::Impl::reportAspirationWindowReSearch(
     }
 
     writeUci(
-            "info depth {} seldepth {} score {} {} nodes {} time {}{} hashfull {}",
+            "info depth {} seldepth {} score {} {} nodes {}{} time {}{} hashfull {}",
             depth,
             searchStatistics.selectiveDepth,
             scoreToString(searchEval),
             searchEval <= previousLowerBound ? "upperbound" : "lowerbound",
             searchStatistics.normalNodesSearched + searchStatistics.qNodesSearched,
+            optionalTbHitsString,
             searchStatistics.timeElapsed.count(),
             optionalNpsString,
             (int)std::round(searchStatistics.ttableUtilization * 1000));
@@ -547,7 +560,8 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
     if (option.getType() == FrontEndOption::Type::Action) {
         if (optionParseResult->optionValue.has_value()) {
             writeDebug(
-                    "Warning: Option '{}' is a button. Expected no value, but found '{}'. Ignoring "
+                    "Warning: Option '{}' is a button. Expected no value, but found '{}'. "
+                    "Ignoring "
                     "this value.",
                     option.getName(),
                     *optionParseResult->optionValue);
@@ -565,7 +579,8 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
 
     if (!optionParseResult->optionValue.has_value()) {
         writeDebug(
-                "Error: Option '{}' is not a button. Failed to find value in the following string: "
+                "Error: Option '{}' is not a button. Failed to find value in the following "
+                "string: "
                 "'{}'",
                 option.getName(),
                 line);
@@ -575,7 +590,8 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
     if (optionParseResult->optionValue->empty()) {
         if (option.getType() != FrontEndOption::Type::String) {
             writeDebug(
-                    "Error: Failed to find non-empty option value for non-string option '{}' in "
+                    "Error: Failed to find non-empty option value for non-string option '{}' "
+                    "in "
                     "the following string: '{}'",
                     option.getName(),
                     line);

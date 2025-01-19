@@ -17,6 +17,8 @@ class TimeManager {
 
     [[nodiscard]] bool shouldStopAfterFullPly(int depth) const;
 
+    void didTbProbe() const;
+
     void configureForTimeControl(
             std::chrono::milliseconds timeLeft,
             std::chrono::milliseconds increment,
@@ -31,7 +33,7 @@ class TimeManager {
 
     void configureForFixedNodesSearch(std::uint64_t nodes);
 
-    std::chrono::milliseconds getTimeElapsed() const;
+    [[nodiscard]] std::chrono::milliseconds getTimeElapsed() const;
 
   private:
     enum class TimeManagementMode {

@@ -1,6 +1,9 @@
 #include "Engine.h"
 
 #include "MoveSearcher.h"
+#include "Syzygy.h"
+
+#include <filesystem>
 
 class Engine::Impl {
   public:
@@ -23,12 +26,16 @@ class Engine::Impl {
 
     [[nodiscard]] EvalT evaluate(const GameState& gameState) const;
 
+    void initializeSyzygy(const std::filesystem::path& syzygyDir);
+
   private:
     StackOfVectors<Move> moveStack_;
     TimeManager timeManager_;
     Evaluator evaluator_;
     MoveSearcher moveSearcher_;
     IFrontEnd* frontEnd_ = nullptr;
+
+    bool hasSyzygy_ = false;
 };
 
 Engine::Impl::Impl()
@@ -45,6 +52,11 @@ void Engine::Impl::setFrontEnd(IFrontEnd* frontEnd) {
     frontEnd_ = frontEnd;
     timeManager_.setFrontEnd(frontEnd);
     moveSearcher_.setFrontEnd(frontEnd);
+
+    frontEnd_->addOption(
+            FrontEndOption::createString("SyzygyPath", "", [this](const std::string_view v) {
+                initializeSyzygy(std::filesystem::path(v));
+            }));
 }
 
 void Engine::Impl::newGame() {
@@ -102,9 +114,6 @@ SearchInfo Engine::Impl::findMove(
 
         const auto searchStatistics = moveSearcher_.getSearchStatistics();
 
-        const std::uint64_t numNodes =
-                searchStatistics.normalNodesSearched + searchStatistics.qNodesSearched;
-
         searchInfo.score      = searchResult.eval;
         searchInfo.depth      = depth;
         searchInfo.statistics = searchStatistics;
@@ -151,6 +160,21 @@ void Engine::Impl::setTTableSize(const int requestedSizeInMb) {
 
 EvalT Engine::Impl::evaluate(const GameState& gameState) const {
     return evaluator_.evaluate(gameState);
+}
+
+void Engine::Impl::initializeSyzygy(const std::filesystem::path& syzygyDir) {
+    if (hasSyzygy_) {
+        tearDownSyzygy();
+    }
+
+    if (syzygyDir.empty()) {
+        hasSyzygy_ = false;
+    } else {
+        initSyzygy(syzygyDir);
+        hasSyzygy_ = true;
+    }
+
+    moveSearcher_.setSyzygyEnabled(hasSyzygy_);
 }
 
 // Implementation of interface: forward to implementation

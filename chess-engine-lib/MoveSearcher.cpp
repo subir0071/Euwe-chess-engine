@@ -4,6 +4,7 @@
 #include "Math.h"
 #include "MoveOrdering.h"
 #include "SEE.h"
+#include "Syzygy.h"
 #include "TTable.h"
 
 #include <algorithm>
@@ -21,6 +22,8 @@ class MoveSearcher::Impl {
     Impl(const TimeManager& timeManager, const Evaluator& evaluator);
 
     void setFrontEnd(IFrontEnd* frontEnd);
+
+    void setSyzygyEnabled(bool enabled);
 
     void newGame();
 
@@ -127,6 +130,8 @@ class MoveSearcher::Impl {
     std::uint8_t tTableTick_ = 0;
 
     SearchTTable tTable_ = {};
+
+    bool syzygyEnabled_ = false;
 
     MoveScorer moveScorer_;
 
@@ -283,6 +288,11 @@ void MoveSearcher::Impl::setFrontEnd(IFrontEnd* frontEnd) {
     frontEnd_ = frontEnd;
 }
 
+void MoveSearcher::Impl::setSyzygyEnabled(const bool enabled) {
+    syzygyEnabled_           = enabled;
+    searchStatistics_.tbHits = 0;
+}
+
 void MoveSearcher::Impl::newGame() {
     // Reset internal state for the sake of consistency
 
@@ -420,6 +430,15 @@ EvalT MoveSearcher::Impl::search(
 
     if (depth == 0) {
         return quiesce(gameState, alpha, beta, ply, stack);
+    }
+
+    if (syzygyEnabled_ && ply > 0) {
+        const auto probeResult = probeSyzygyWdl(gameState);
+        if (probeResult) {
+            *searchStatistics_.tbHits += 1;
+            timeManager_.didTbProbe();
+            return *probeResult;
+        }
     }
 
     // alphaOrig determines whether the value returned is an upper bound
@@ -1309,6 +1328,10 @@ SearchStatistics MoveSearcher::Impl::getSearchStatistics() const {
 
 void MoveSearcher::Impl::resetSearchStatistics() {
     searchStatistics_ = {};
+
+    if (syzygyEnabled_) {
+        searchStatistics_.tbHits = 0;
+    }
 }
 
 int MoveSearcher::Impl::getDefaultTTableSizeInMb() const {
@@ -1333,8 +1356,12 @@ MoveSearcher::MoveSearcher(const TimeManager& timeManager, const Evaluator& eval
 
 MoveSearcher::~MoveSearcher() = default;
 
-void MoveSearcher::setFrontEnd(IFrontEnd* frontEnd) {
+void MoveSearcher::setFrontEnd(IFrontEnd* const frontEnd) {
     impl_->setFrontEnd(frontEnd);
+}
+
+void MoveSearcher::setSyzygyEnabled(const bool enabled) {
+    impl_->setSyzygyEnabled(enabled);
 }
 
 void MoveSearcher::newGame() {
@@ -1343,7 +1370,7 @@ void MoveSearcher::newGame() {
 
 RootSearchResult MoveSearcher::searchForBestMove(
         GameState& gameState,
-        int depth,
+        const int depth,
         StackOfVectors<Move>& stack,
         std::optional<EvalT> evalGuess) {
     return impl_->searchForBestMove(gameState, depth, stack, evalGuess);

@@ -5,6 +5,7 @@ set(
     "ConsoleColor.cpp"
     "Engine.cpp"
     "Eval.cpp"
+    "EvalParams.cpp"
     "EvalT.cpp"
     "FrontEndOption.cpp"
     "GameState.cpp"
@@ -18,9 +19,10 @@ set(
     "PieceControl.cpp"
     "SEE.cpp"
     "Side.cpp"
+    "Syzygy.cpp"
     "TimeManager.cpp"
     "UciFrontEnd.cpp"
-    "EvalParams.cpp"
+
     "Pyrrhic/tbprobe.cpp"
 )
 

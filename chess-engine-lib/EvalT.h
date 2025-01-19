@@ -15,3 +15,5 @@ inline constexpr EvalT kMateEval     = (EvalT)30'000;
 [[nodiscard]] int getMateDistanceInPly(EvalT eval);
 
 [[nodiscard]] EvalT mateDistancePlus1(EvalT eval);
+
+[[nodiscard]] EvalT mateIn(int mateDistance);

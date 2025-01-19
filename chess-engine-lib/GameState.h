@@ -100,6 +100,8 @@ class GameState {
 
     [[nodiscard]] Side getSideToMove() const { return sideToMove_; }
 
+    [[nodiscard]] CastlingRights getCastlingRights() const { return castlingRights_; }
+
     [[nodiscard]] bool canCastleKingSide(Side side) const {
         return canCastle(side, CastlingRights::KingSide);
     }
@@ -123,6 +125,8 @@ class GameState {
     [[nodiscard]] HashT getPawnKingHash() const { return pawnKingHash_; }
 
     [[nodiscard]] BitBoard getAnyOccupancy() const { return occupancy_[0] | occupancy_[1]; }
+
+    [[nodiscard]] int getNumPieces() const { return popCount(getAnyOccupancy()); }
 
     [[nodiscard]] const BitBoard& getSideOccupancy(const Side side) const {
         return occupancy_[(int)side];

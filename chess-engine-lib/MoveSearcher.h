@@ -25,6 +25,8 @@ class MoveSearcher {
 
     void setFrontEnd(IFrontEnd* frontEnd);
 
+    void setSyzygyEnabled(bool enabled);
+
     void newGame();
 
     // Perform search and return the principal variation and evaluation.

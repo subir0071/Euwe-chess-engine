@@ -25,3 +25,9 @@ FORCE_INLINE EvalT mateDistancePlus1(const EvalT eval) {
 
     return eval - signum(eval);
 }
+
+FORCE_INLINE EvalT mateIn(const int mateDistance) {
+    MY_ASSERT(mateDistance >= 0);
+
+    return kMateEval - mateDistance;
+}

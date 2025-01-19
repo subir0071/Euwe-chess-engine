@@ -14,10 +14,12 @@ namespace {
         const std::chrono::high_resolution_clock::time_point deadLine, int& interruptCheckCounter) {
     static constexpr int interruptCheckInterval = 32;
 
-    interruptCheckCounter = (interruptCheckCounter + 1) % interruptCheckInterval;
-    if (interruptCheckCounter != 0) {
+    if (interruptCheckCounter > 0) {
+        --interruptCheckCounter;
         return false;
     }
+
+    interruptCheckCounter = interruptCheckInterval;
 
     return timeIsUp(deadLine);
 }
@@ -93,6 +95,11 @@ bool TimeManager::shouldStopAfterFullPly(const int depth) const {
             UNREACHABLE;
         }
     }
+}
+
+void TimeManager::didTbProbe() const {
+    // Force time check on next call.
+    interruptCheckCounter_ = 0;
 }
 
 void TimeManager::configureForTimeControl(
