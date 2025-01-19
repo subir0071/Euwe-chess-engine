@@ -443,29 +443,34 @@ EvalT MoveSearcher::Impl::search(
             return -kInfiniteEval;
         }
 
-        EvalT tbScore = probeSyzygyWdl(gameState);
-        *searchStatistics_.tbHits += 1;
+        const auto maybeTbScore = probeSyzygyWdl(gameState);
         timeManager_.forceNextCheck();
 
-        if (!isMate(tbScore)) {
-            // TB probe indicates draw; draw scores are exact, so no need to continue searching.
-            return tbScore;
-        }
+        if (maybeTbScore) {
+            const EvalT tbScore = *maybeTbScore;
 
-        if (tbScore > 0) {
-            // TB probe indicates a win. But we don't know distance to mate, so this is only a lower
-            // bound.
-            alpha        = max(alpha, tbScore);
-            tbLowerBound = tbScore;
-        } else {
-            // TB probe indicates a loss. But we don't know distance to mate, so this is only an
-            // upper bound.
-            beta         = min(beta, tbScore);
-            tbUpperBound = tbScore;
-        }
+            *searchStatistics_.tbHits += 1;
 
-        if (alpha >= beta) {
-            return tbScore;
+            if (!isMate(tbScore)) {
+                // TB probe indicates draw; draw scores are exact, so no need to continue searching.
+                return tbScore;
+            }
+
+            if (tbScore > 0) {
+                // TB probe indicates a win. But we don't know distance to mate, so this is only a lower
+                // bound.
+                alpha        = max(alpha, tbScore);
+                tbLowerBound = tbScore;
+            } else {
+                // TB probe indicates a loss. But we don't know distance to mate, so this is only an
+                // upper bound.
+                beta         = min(beta, tbScore);
+                tbUpperBound = tbScore;
+            }
+
+            if (alpha >= beta) {
+                return tbScore;
+            }
         }
     }
 

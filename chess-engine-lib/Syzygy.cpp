@@ -55,6 +55,8 @@ FORCE_INLINE bool canProbeSyzgyRoot(const GameState& gameState) {
 }
 
 std::vector<Move> getSyzygyRootMoves(const GameState& gameState) {
+    MY_ASSERT_DEBUG(canProbeSyzgyRoot(gameState));
+
     TbRootMoves tbRootMoves;
 
     const int probeResult = tb_probe_root_dtz(
@@ -73,11 +75,10 @@ std::vector<Move> getSyzygyRootMoves(const GameState& gameState) {
             &tbRootMoves);
 
     MY_ASSERT_DEBUG(probeResult != 0);
-    if (probeResult == 0) {
+    MY_ASSERT_DEBUG(tbRootMoves.size > 0);
+    if (probeResult == 0 || tbRootMoves.size == 0) {
         return {};
     }
-
-    MY_ASSERT(tbRootMoves.size > 0);
 
     std::int32_t bestTbRank = tbRootMoves.moves[0].tbRank;
     for (unsigned i = 1; i < tbRootMoves.size; ++i) {
@@ -142,7 +143,7 @@ FORCE_INLINE bool canProbeSyzgyWdl(const GameState& gameState) {
     return true;
 }
 
-FORCE_INLINE EvalT probeSyzygyWdl(const GameState& gameState) {
+FORCE_INLINE std::optional<EvalT> probeSyzygyWdl(const GameState& gameState) {
     MY_ASSERT_DEBUG(canProbeSyzgyWdl(gameState));
 
     unsigned probeResult = tb_probe_wdl(
@@ -157,7 +158,11 @@ FORCE_INLINE EvalT probeSyzygyWdl(const GameState& gameState) {
             getSyzygyEnPassantTarget(gameState),
             getSyzygySide(gameState));
 
-    MY_ASSERT(probeResult != TB_RESULT_FAILED);
+    MY_ASSERT_DEBUG(probeResult != TB_RESULT_FAILED);
+
+    if (probeResult == TB_RESULT_FAILED) {
+        return std::nullopt;
+    }
 
     switch (probeResult) {
         case TB_WIN:

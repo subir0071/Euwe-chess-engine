@@ -17,4 +17,4 @@ void tearDownSyzygy();
 
 [[nodiscard]] bool canProbeSyzgyWdl(const GameState& gameState);
 
-[[nodiscard]] EvalT probeSyzygyWdl(const GameState& gameState);
+[[nodiscard]] std::optional<EvalT> probeSyzygyWdl(const GameState& gameState);
