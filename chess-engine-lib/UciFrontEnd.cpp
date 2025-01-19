@@ -511,7 +511,7 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
 
         try {
             option.trigger();
-            writeDebug("Action option '{}' was triggered.", option.getName());
+            writeUci("info string Action option '{}' was triggered.", option.getName());
         } catch (const std::exception& e) {
             writeDebug(
                     "Error: Failed to trigger action option '{}': {}", option.getName(), e.what());
@@ -540,7 +540,7 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
 
         try {
             option.set("");
-            writeDebug("Option '{}' was set to empty string.", option.getName());
+            writeUci("info string Option '{}' was set to empty string.", option.getName());
         } catch (const std::exception& e) {
             writeDebug(
                     "Error: Failed to set option '{}' to empty string: {}",
@@ -552,9 +552,10 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
 
     try {
         option.set(*optionParseResult->optionValue);
-        writeDebug(
-
-                "Option '{}' was set to '{}'.", option.getName(), *optionParseResult->optionValue);
+        writeUci(
+                "info string Option '{}' was set to '{}'.",
+                option.getName(),
+                *optionParseResult->optionValue);
     } catch (const std::exception& e) {
         writeDebug(
                 "Error: Failed to set option '{}' to '{}': {}",
