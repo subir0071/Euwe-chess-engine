@@ -31,7 +31,8 @@ TEST(GameStateHelpers, TestToVisualString) {
 }
 
 TEST(GameStateHelpers, TestToVisualStringDoublePush) {
-    GameState startingPosition = GameState::startingPosition();
+    GameState startingPosition =
+            GameState::fromFen("rnbqkbnr/ppppp1pp/8/8/5p2/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
     const Move doublePush{
             .pieceToMove = Piece::Pawn, .from = BoardPosition::E2, .to = BoardPosition::E4};
@@ -42,13 +43,13 @@ TEST(GameStateHelpers, TestToVisualStringDoublePush) {
             "  .-------------------------------.\n"
             "8 | r*| n | b | q | k | b | n | r*|\n"
             "  |---+---+---+---+---+---+---+---|\n"
-            "7 | p | p | p | p | p | p | p | p |\n"
+            "7 | p | p | p | p | p |   | p | p |\n"
             "  |---+---+---+---+---+---+---+---|\n"
             "6 |   |   |   |   |   |   |   |   |\n"
             "  |---+---+---+---+---+---+---+---|\n"
             "5 |   |   |   |   |   |   |   |   |\n"
             "  |---+---+---+---+---+---+---+---|\n"
-            "4 |   |   |   |   | P |   |   |   |\n"
+            "4 |   |   |   |   | P | p |   |   |\n"
             "  |---+---+---+---+---+---+---+---|\n"
             "3 |   |   |   |   | * |   |   |   |\n"
             "  |---+---+---+---+---+---+---+---|\n"

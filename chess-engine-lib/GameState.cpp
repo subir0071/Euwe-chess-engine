@@ -833,11 +833,22 @@ void GameState::handlePawnMove(const Move& move) {
     const auto [fromFile, fromRank] = fileRankFromPosition(move.from);
     const auto [_, toRank]          = fileRankFromPosition(move.to);
 
+    // Double pawn push
     if (std::abs(fromRank - toRank) == 2) {
-        // Double pawn push
-        enPassantTarget_ = positionFromFileRank(fromFile, (fromRank + toRank) / 2);
+        const std::uint64_t toMask = (std::uint64_t)1 << (int)move.to;
+        const std::uint64_t neighborMask =
+                (toMask & kNotWestFileMask) >> 1 | (toMask & kNotEastFileMask) << 1;
 
-        updateHashForEnPassantFile(fromFile, boardHash_);
+        const BitBoard& opponentPawns = getPieceBitBoard(nextSide(sideToMove_), Piece::Pawn);
+
+        const bool pawnCanCaptureEnPassant =
+                (opponentPawns & (BitBoard)neighborMask) != BitBoard::Empty;
+
+        if (pawnCanCaptureEnPassant) {
+            enPassantTarget_ = positionFromFileRank(fromFile, (fromRank + toRank) / 2);
+
+            updateHashForEnPassantFile(fromFile, boardHash_);
+        }
     }
 }
 
