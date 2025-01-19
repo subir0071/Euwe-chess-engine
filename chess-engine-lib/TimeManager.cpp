@@ -100,6 +100,8 @@ void TimeManager::configureForTimeControl(
         const std::chrono::milliseconds increment,
         const int movesToGo,
         const GameState& gameState) {
+    startTime_ = std::chrono::high_resolution_clock::now();
+
     const int expectedGameLength = 40;
     const int expectedMovesLeft =
             max(10, expectedGameLength - (int)gameState.getHalfMoveClock() / 2);
@@ -120,29 +122,40 @@ void TimeManager::configureForTimeControl(
                 hardTimeBudget.count()));
     }
 
-    const auto now = std::chrono::high_resolution_clock::now();
-
     mode_         = TimeManagementMode::TimeControl;
-    softDeadLine_ = now + softTimeBudget;
-    hardDeadLine_ = now + hardTimeBudget;
+    softDeadLine_ = startTime_ + softTimeBudget;
+    hardDeadLine_ = startTime_ + hardTimeBudget;
 }
 
 void TimeManager::configureForInfiniteSearch() {
+    startTime_ = std::chrono::high_resolution_clock::now();
+
     mode_ = TimeManagementMode::Infinite;
 }
 
 void TimeManager::configureForFixedTimeSearch(const std::chrono::milliseconds time) {
+    startTime_ = std::chrono::high_resolution_clock::now();
+
     mode_         = TimeManagementMode::FixedTime;
-    softDeadLine_ = std::chrono::high_resolution_clock::now() + time - moveOverhead_;
+    softDeadLine_ = startTime_ + time - moveOverhead_;
     hardDeadLine_ = softDeadLine_;
 }
 
 void TimeManager::configureForFixedDepthSearch(const int depth) {
+    startTime_ = std::chrono::high_resolution_clock::now();
+
     mode_        = TimeManagementMode::FixedDepth;
     depthTarget_ = depth;
 }
 
 void TimeManager::configureForFixedNodesSearch(const std::uint64_t nodes) {
+    startTime_ = std::chrono::high_resolution_clock::now();
+
     mode_        = TimeManagementMode::FixedNodes;
     nodesTarget_ = nodes;
+}
+
+std::chrono::milliseconds TimeManager::getTimeElapsed() const {
+    const auto elapsed = std::chrono::high_resolution_clock::now() - startTime_;
+    return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
 }

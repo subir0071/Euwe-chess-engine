@@ -31,6 +31,8 @@ class TimeManager {
 
     void configureForFixedNodesSearch(std::uint64_t nodes);
 
+    std::chrono::milliseconds getTimeElapsed() const;
+
   private:
     enum class TimeManagementMode {
         None,
@@ -42,6 +44,8 @@ class TimeManager {
     };
 
     TimeManagementMode mode_ = TimeManagementMode::None;
+
+    std::chrono::high_resolution_clock::time_point startTime_{};
 
     std::chrono::high_resolution_clock::time_point softDeadLine_{};
     std::chrono::high_resolution_clock::time_point hardDeadLine_{};

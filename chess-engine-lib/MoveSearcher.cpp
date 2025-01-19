@@ -1266,8 +1266,17 @@ void MoveSearcher::Impl::interruptSearch() {
 }
 
 SearchStatistics MoveSearcher::Impl::getSearchStatistics() const {
-    SearchStatistics searchStatistics  = searchStatistics_;
+    SearchStatistics searchStatistics = searchStatistics_;
+
     searchStatistics.ttableUtilization = tTable_.getUtilization();
+    searchStatistics.timeElapsed       = timeManager_.getTimeElapsed();
+
+    const std::uint64_t totalNodes =
+            searchStatistics.normalNodesSearched + searchStatistics.qNodesSearched;
+    using FloatSeconds = std::chrono::duration<float>;
+    const float seconds =
+            std::chrono::duration_cast<FloatSeconds>(searchStatistics.timeElapsed).count();
+    searchStatistics.nodesPerSecond = static_cast<float>(totalNodes) / seconds;
 
     return searchStatistics;
 }

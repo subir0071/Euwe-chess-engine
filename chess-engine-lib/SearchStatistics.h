@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include <cstdint>
 
 struct SearchStatistics {
@@ -8,4 +10,7 @@ struct SearchStatistics {
     std::uint64_t tTableHits          = 0;
     float ttableUtilization           = 0.0f;
     int selectiveDepth                = 0;
+
+    std::chrono::milliseconds timeElapsed{};
+    float nodesPerSecond = 0.0f;
 };

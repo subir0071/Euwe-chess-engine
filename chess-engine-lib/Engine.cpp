@@ -71,8 +71,6 @@ SearchInfo Engine::Impl::findMove(const GameState& gameState) {
     std::optional<EvalT> evalGuess = std::nullopt;
     SearchInfo searchInfo;
 
-    auto startTime = std::chrono::high_resolution_clock::now();
-
     int depth;
     for (depth = 1; depth <= maxDepth; ++depth) {
         const auto searchResult =
@@ -85,32 +83,25 @@ SearchInfo Engine::Impl::findMove(const GameState& gameState) {
                     searchResult.principalVariation.begin(), searchResult.principalVariation.end());
         }
 
-        const auto timeNow = std::chrono::high_resolution_clock::now();
-        const auto millisecondsElapsed =
-                std::chrono::duration_cast<std::chrono::milliseconds>(timeNow - startTime).count();
-
         const auto searchStatistics = moveSearcher_.getSearchStatistics();
 
         const std::uint64_t numNodes =
                 searchStatistics.normalNodesSearched + searchStatistics.qNodesSearched;
-        const float nodesPerSecond = static_cast<float>(numNodes) / millisecondsElapsed * 1'000.0f;
 
-        searchInfo.score          = searchResult.eval;
-        searchInfo.depth          = depth;
-        searchInfo.timeMs         = (int)millisecondsElapsed;
-        searchInfo.numNodes       = numNodes;
-        searchInfo.nodesPerSecond = nodesPerSecond;
+        searchInfo.score      = searchResult.eval;
+        searchInfo.depth      = depth;
+        searchInfo.statistics = searchStatistics;
 
         if (searchResult.wasInterrupted) {
             if (frontEnd_) {
-                frontEnd_->reportPartialSearch(searchInfo, searchStatistics);
+                frontEnd_->reportPartialSearch(searchInfo);
             }
             searchInfo.depth -= 1;
             break;
         }
 
         if (frontEnd_) {
-            frontEnd_->reportFullSearch(searchInfo, searchStatistics);
+            frontEnd_->reportFullSearch(searchInfo);
         }
 
         if (isMate(searchResult.eval) && getMateDistanceInPly(searchResult.eval) <= depth) {
@@ -123,7 +114,7 @@ SearchInfo Engine::Impl::findMove(const GameState& gameState) {
     }
 
     if (frontEnd_) {
-        frontEnd_->reportSearchStatistics(moveSearcher_.getSearchStatistics());
+        frontEnd_->reportSearchStatistics(searchInfo.statistics);
     }
 
     return searchInfo;

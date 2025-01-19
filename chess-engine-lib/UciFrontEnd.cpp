@@ -60,11 +60,9 @@ class UciFrontEnd::Impl final : public IFrontEnd {
 
     void run() override;
 
-    void reportFullSearch(
-            const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const override;
+    void reportFullSearch(const SearchInfo& searchInfo) const override;
 
-    void reportPartialSearch(
-            const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const override;
+    void reportPartialSearch(const SearchInfo& searchInfo) const override;
 
     void reportSearchStatistics(const SearchStatistics& searchStatistics) const override;
 
@@ -203,16 +201,16 @@ void UciFrontEnd::Impl::run() {
     stopSearchIfNeeded();
 }
 
-void UciFrontEnd::Impl::reportFullSearch(
-        const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const {
+void UciFrontEnd::Impl::reportFullSearch(const SearchInfo& searchInfo) const {
     std::string optionalScoreString = "";
     if (isValid(searchInfo.score)) {
         optionalScoreString = std::format(" score {}", scoreToString(searchInfo.score));
     }
 
     std::string optionalNpsString = "";
-    if (searchInfo.timeMs > 0) {
-        optionalNpsString = std::format(" nps {}", (int)std::round(searchInfo.nodesPerSecond));
+    if (searchInfo.statistics.timeElapsed.count() > 0) {
+        optionalNpsString =
+                std::format(" nps {}", (int)std::round(searchInfo.statistics.nodesPerSecond));
     }
 
     const std::string pvString = pvToString(searchInfo.principalVariation);
@@ -220,24 +218,23 @@ void UciFrontEnd::Impl::reportFullSearch(
     writeUci(
             "info depth {} seldepth {}{} nodes {} time {}{} hashfull {} pv {}",
             searchInfo.depth,
-            searchStatistics.selectiveDepth,
+            searchInfo.statistics.selectiveDepth,
             optionalScoreString,
-            searchInfo.numNodes,
-            searchInfo.timeMs,
+            searchInfo.statistics.normalNodesSearched + searchInfo.statistics.qNodesSearched,
+            searchInfo.statistics.timeElapsed.count(),
             optionalNpsString,
-            (int)std::round(searchStatistics.ttableUtilization * 1000),
+            (int)std::round(searchInfo.statistics.ttableUtilization * 1000),
             pvString);
     std::flush(out_);
 }
 
-void UciFrontEnd::Impl::reportPartialSearch(
-        const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const {
+void UciFrontEnd::Impl::reportPartialSearch(const SearchInfo& searchInfo) const {
     writeDebug("Completed partial search of depth {}", searchInfo.depth);
 
     SearchInfo completedSearchInfo = searchInfo;
     completedSearchInfo.depth      = searchInfo.depth - 1;
 
-    reportFullSearch(completedSearchInfo, searchStatistics);
+    reportFullSearch(completedSearchInfo);
 }
 
 void UciFrontEnd::Impl::reportSearchStatistics(const SearchStatistics& searchStatistics) const {
@@ -264,13 +261,21 @@ void UciFrontEnd::Impl::reportAspirationWindowReSearch(
             newLowerBound,
             newUpperBound);
 
+    std::string optionalNpsString = "";
+    if (searchStatistics.timeElapsed.count() > 0) {
+        optionalNpsString =
+                std::format(" nps {}", (int)std::round(searchStatistics.nodesPerSecond));
+    }
+
     writeUci(
-            "info depth {} seldepth {} score {} {} nodes {} hashfull {}",
+            "info depth {} seldepth {} score {} {} nodes {} time {}{} hashfull {}",
             depth,
             searchStatistics.selectiveDepth,
             scoreToString(searchEval),
             searchEval <= previousLowerBound ? "upperbound" : "lowerbound",
             searchStatistics.normalNodesSearched + searchStatistics.qNodesSearched,
+            searchStatistics.timeElapsed.count(),
+            optionalNpsString,
             (int)std::round(searchStatistics.ttableUtilization * 1000));
     std::flush(out_);
 }
@@ -700,14 +705,12 @@ void UciFrontEnd::run() {
     impl_->run();
 }
 
-void UciFrontEnd::reportFullSearch(
-        const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const {
-    impl_->reportFullSearch(searchInfo, searchStatistics);
+void UciFrontEnd::reportFullSearch(const SearchInfo& searchInfo) const {
+    impl_->reportFullSearch(searchInfo);
 }
 
-void UciFrontEnd::reportPartialSearch(
-        const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const {
-    impl_->reportPartialSearch(searchInfo, searchStatistics);
+void UciFrontEnd::reportPartialSearch(const SearchInfo& searchInfo) const {
+    impl_->reportPartialSearch(searchInfo);
 }
 
 void UciFrontEnd::reportSearchStatistics(const SearchStatistics& searchStatistics) const {

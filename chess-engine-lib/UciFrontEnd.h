@@ -23,11 +23,9 @@ class UciFrontEnd final : public IFrontEnd {
 
     void run() override;
 
-    void reportFullSearch(
-            const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const override;
+    void reportFullSearch(const SearchInfo& searchInfo) const override;
 
-    void reportPartialSearch(
-            const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const override;
+    void reportPartialSearch(const SearchInfo& searchInfo) const override;
 
     void reportSearchStatistics(const SearchStatistics& searchStatistics) const override;
 

@@ -17,13 +17,11 @@ class IFrontEnd {
 
     // Can be used by the engine to report that a search to a certain depth has been fully
     // completed.
-    virtual void reportFullSearch(
-            const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const = 0;
+    virtual void reportFullSearch(const SearchInfo& searchInfo) const = 0;
 
     // Can be used by the engine to report that a search to a certain depth has been partially
     // completed. Normally this happens if the engine runs out of time while searching.
-    virtual void reportPartialSearch(
-            const SearchInfo& searchInfo, const SearchStatistics& searchStatistics) const = 0;
+    virtual void reportPartialSearch(const SearchInfo& searchInfo) const = 0;
 
     // Can be used by the engine to report statistics after ending the search.
     virtual void reportSearchStatistics(const SearchStatistics& searchStatistics) const = 0;
