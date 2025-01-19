@@ -124,6 +124,7 @@ struct HashCollisionTestConfig {
 
 class HashCollisionTests : public ::testing::TestWithParam<HashCollisionTestConfig> {};
 
+#ifdef NDEBUG
 TEST_P(HashCollisionTests, FindHashCollisions) {
     const HashCollisionTestConfig config = GetParam();
 
@@ -131,6 +132,7 @@ TEST_P(HashCollisionTests, FindHashCollisions) {
     StackOfVectors<Move> stack;
     findHashCollisions(gameState, config.depth, stack);
 }
+#endif
 
 TEST_P(HashCollisionTests, FindPawnKingHashCollisions) {
     const HashCollisionTestConfig config = GetParam();

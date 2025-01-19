@@ -595,10 +595,12 @@ INSTANTIATE_TEST_CASE_P(
 INSTANTIATE_TEST_CASE_P(
         MoveGeneration, ValidateMoveStatsWithTTable, testCasesFast, validateMoveStatsName);
 
+#ifdef NDEBUG
 INSTANTIATE_TEST_CASE_P(
         MoveGenerationSlow, ValidateMoveStatsWithUnmake, testCasesSlow, validateMoveStatsName);
 
 INSTANTIATE_TEST_CASE_P(
         MoveGenerationSlow, ValidateMoveStatsWithTTable, testCasesSlow, validateMoveStatsName);
+#endif
 
 }  // namespace MoveGenerationTests
