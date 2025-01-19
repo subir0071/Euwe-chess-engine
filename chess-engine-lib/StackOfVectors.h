@@ -38,6 +38,7 @@ class StackOfVectors {
         for (const auto& item : items) {
             stackVector.push_back(item);
         }
+        stackVector.lock();
         return stackVector;
     }
 
