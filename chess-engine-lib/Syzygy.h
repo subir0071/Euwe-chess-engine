@@ -9,4 +9,6 @@
 void initSyzygy(const std::filesystem::path& syzygyDir);
 void tearDownSyzygy();
 
-[[nodiscard]] std::optional<EvalT> probeSyzygyWdl(const GameState& gameState);
+[[nodiscard]] bool canProbeSyzgyWdl(const GameState& gameState);
+
+[[nodiscard]] EvalT probeSyzygyWdl(const GameState& gameState);

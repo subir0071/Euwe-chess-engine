@@ -17,7 +17,7 @@ class TimeManager {
 
     [[nodiscard]] bool shouldStopAfterFullPly(int depth) const;
 
-    void didTbProbe() const;
+    void forceNextCheck() const;
 
     void configureForTimeControl(
             std::chrono::milliseconds timeLeft,

@@ -416,10 +416,6 @@ EvalT MoveSearcher::Impl::search(
         Move lastMove,
         const int lastNullMovePly,
         StackOfVectors<Move>& stack) {
-    if (shouldStopSearch()) {
-        return -kInfiniteEval;
-    }
-
     const bool isPvNode = beta - alpha > 1;
 
     ++searchStatistics_.normalNodesSearched;
@@ -432,13 +428,22 @@ EvalT MoveSearcher::Impl::search(
         return quiesce(gameState, alpha, beta, ply, stack);
     }
 
-    if (syzygyEnabled_ && ply > 0) {
-        const auto probeResult = probeSyzygyWdl(gameState);
-        if (probeResult) {
-            *searchStatistics_.tbHits += 1;
-            timeManager_.didTbProbe();
-            return *probeResult;
+    constexpr int kSyzygyMinProbeDepth = 5;
+    if (syzygyEnabled_ && ply > 0 && depth > kSyzygyMinProbeDepth && canProbeSyzgyWdl(gameState)) {
+        timeManager_.forceNextCheck();
+        if (shouldStopSearch()) {
+            return -kInfiniteEval;
         }
+
+        const EvalT tbScore = probeSyzygyWdl(gameState);
+        *searchStatistics_.tbHits += 1;
+        timeManager_.forceNextCheck();
+
+        return tbScore;
+    }
+
+    if (shouldStopSearch()) {
+        return -kInfiniteEval;
     }
 
     // alphaOrig determines whether the value returned is an upper bound

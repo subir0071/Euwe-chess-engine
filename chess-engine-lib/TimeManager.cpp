@@ -97,8 +97,7 @@ bool TimeManager::shouldStopAfterFullPly(const int depth) const {
     }
 }
 
-void TimeManager::didTbProbe() const {
-    // Force time check on next call.
+void TimeManager::forceNextCheck() const {
     interruptCheckCounter_ = 0;
 }
 

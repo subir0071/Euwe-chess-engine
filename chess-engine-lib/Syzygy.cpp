@@ -42,16 +42,22 @@ void tearDownSyzygy() {
     tb_free();
 }
 
-FORCE_INLINE std::optional<EvalT> probeSyzygyWdl(const GameState& gameState) {
+FORCE_INLINE bool canProbeSyzgyWdl(const GameState& gameState) {
     if (gameState.getPlySinceCaptureOrPawn() != 0) {
-        return std::nullopt;
+        return false;
     }
     if (gameState.getCastlingRights() != GameState::CastlingRights::None) {
-        return std::nullopt;
+        return false;
     }
     if (gameState.getNumPieces() > TB_LARGEST) {
-        return std::nullopt;
+        return false;
     }
+
+    return true;
+}
+
+FORCE_INLINE EvalT probeSyzygyWdl(const GameState& gameState) {
+    MY_ASSERT_DEBUG(canProbeSyzgyWdl(gameState));
 
     unsigned probeResult = tb_probe_wdl(
             getSyzygyOccupancy(gameState, Side::White),
@@ -65,7 +71,7 @@ FORCE_INLINE std::optional<EvalT> probeSyzygyWdl(const GameState& gameState) {
             getSyzygyEnPassantTarget(gameState),
             getSyzygySide(gameState));
 
-    MY_ASSERT_DEBUG(probeResult != TB_RESULT_FAILED);
+    MY_ASSERT(probeResult != TB_RESULT_FAILED);
 
     switch (probeResult) {
         case TB_WIN:
@@ -78,9 +84,6 @@ FORCE_INLINE std::optional<EvalT> probeSyzygyWdl(const GameState& gameState) {
 
         case TB_LOSS:
             return -mateIn(200);
-
-        case TB_RESULT_FAILED:
-            return std::nullopt;
     }
     UNREACHABLE;
 }
