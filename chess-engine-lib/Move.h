@@ -23,6 +23,16 @@ enum class MoveFlags : std::uint8_t {
     return static_cast<MoveFlags>(static_cast<int>(flags) | static_cast<int>(promotionPiece));
 }
 
+constexpr MoveFlags& operator|=(MoveFlags& lhs, const MoveFlags rhs) {
+    lhs = lhs | rhs;
+    return lhs;
+}
+
+constexpr MoveFlags& operator|=(MoveFlags& flags, const Piece promotionPiece) {
+    flags = flags | promotionPiece;
+    return flags;
+}
+
 [[nodiscard]] constexpr bool operator&(const MoveFlags lhs, const MoveFlags rhs) {
     return (static_cast<int>(lhs) & static_cast<int>(rhs)) != 0;
 }

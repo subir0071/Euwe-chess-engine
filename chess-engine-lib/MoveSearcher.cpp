@@ -428,19 +428,19 @@ EvalT MoveSearcher::Impl::search(
         return quiesce(gameState, alpha, beta, ply, stack);
     }
 
-    constexpr int kSyzygyMinProbeDepth = 5;
-    if (syzygyEnabled_ && ply > 0 && depth > kSyzygyMinProbeDepth && canProbeSyzgyWdl(gameState)) {
-        timeManager_.forceNextCheck();
-        if (shouldStopSearch()) {
-            return -kInfiniteEval;
-        }
+    //constexpr int kSyzygyMinProbeDepth = 5;
+    //if (syzygyEnabled_ && ply > 0 && depth > kSyzygyMinProbeDepth && canProbeSyzgyWdl(gameState)) {
+    //    timeManager_.forceNextCheck();
+    //    if (shouldStopSearch()) {
+    //        return -kInfiniteEval;
+    //    }
 
-        const EvalT tbScore = probeSyzygyWdl(gameState);
-        *searchStatistics_.tbHits += 1;
-        timeManager_.forceNextCheck();
+    //    const EvalT tbScore = probeSyzygyWdl(gameState);
+    //    *searchStatistics_.tbHits += 1;
+    //    timeManager_.forceNextCheck();
 
-        return tbScore;
-    }
+    //    return tbScore;
+    //}
 
     if (shouldStopSearch()) {
         return -kInfiniteEval;
