@@ -164,9 +164,13 @@ FORCE_INLINE EvalT probeSyzygyWdl(const GameState& gameState) {
             return mateIn(200);
 
         case TB_CURSED_WIN:
+            return (EvalT)1;
+
         case TB_DRAW:
-        case TB_BLESSED_LOSS:
             return (EvalT)0;
+
+        case TB_BLESSED_LOSS:
+            return (EvalT)-1;
 
         case TB_LOSS:
             return -mateIn(200);

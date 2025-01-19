@@ -131,6 +131,7 @@ class MoveSearcher::Impl {
 
     SearchTTable tTable_ = {};
 
+    bool rootInTb_      = false;
     bool syzygyEnabled_ = false;
 
     MoveScorer moveScorer_;
@@ -428,26 +429,49 @@ EvalT MoveSearcher::Impl::search(
         return quiesce(gameState, alpha, beta, ply, stack);
     }
 
-    //constexpr int kSyzygyMinProbeDepth = 5;
-    //if (syzygyEnabled_ && ply > 0 && depth > kSyzygyMinProbeDepth && canProbeSyzgyWdl(gameState)) {
-    //    timeManager_.forceNextCheck();
-    //    if (shouldStopSearch()) {
-    //        return -kInfiniteEval;
-    //    }
-
-    //    const EvalT tbScore = probeSyzygyWdl(gameState);
-    //    *searchStatistics_.tbHits += 1;
-    //    timeManager_.forceNextCheck();
-
-    //    return tbScore;
-    //}
-
-    if (shouldStopSearch()) {
-        return -kInfiniteEval;
-    }
-
     // alphaOrig determines whether the value returned is an upper bound
     const EvalT alphaOrig = alpha;
+
+    EvalT tbLowerBound = -kInfiniteEval;
+    EvalT tbUpperBound = kInfiniteEval;
+
+    constexpr int kSyzygyMinProbeDepth = 5;
+    if (syzygyEnabled_ && !rootInTb_ && ply > 0 && depth >= kSyzygyMinProbeDepth
+        && canProbeSyzgyWdl(gameState)) {
+        timeManager_.forceNextCheck();
+        if (shouldStopSearch()) {
+            return -kInfiniteEval;
+        }
+
+        EvalT tbScore = probeSyzygyWdl(gameState);
+        *searchStatistics_.tbHits += 1;
+        timeManager_.forceNextCheck();
+
+        if (!isMate(tbScore)) {
+            // TB probe indicates draw; draw scores are exact, so no need to continue searching.
+            return tbScore;
+        }
+
+        if (tbScore > 0) {
+            // TB probe indicates a win. But we don't know distance to mate, so this is only a lower
+            // bound.
+            alpha        = max(alpha, tbScore);
+            tbLowerBound = tbScore;
+        } else {
+            // TB probe indicates a loss. But we don't know distance to mate, so this is only an
+            // upper bound.
+            beta         = min(beta, tbScore);
+            tbUpperBound = tbScore;
+        }
+
+        if (alpha >= beta) {
+            return tbScore;
+        }
+    }
+
+    if (shouldStopSearch()) {
+        return clamp((EvalT)-kInfiniteEval, tbLowerBound, tbUpperBound);
+    }
 
     if (ply > 0) {
         if (isDraw(gameState, stack)) {
@@ -516,7 +540,7 @@ EvalT MoveSearcher::Impl::search(
         updateMateDistance(nullMoveScore);
 
         if (wasInterrupted_) {
-            return -kInfiniteEval;
+            return clamp((EvalT)-kInfiniteEval, tbLowerBound, tbUpperBound);
         }
 
         if (nullMoveScore >= beta) {
@@ -549,7 +573,7 @@ EvalT MoveSearcher::Impl::search(
                             max(searchStatistics_.selectiveDepth, ply + ttInfo.depth);
                 }
                 // Exact value
-                return ttInfo.score;
+                return clamp(ttInfo.score, tbLowerBound, tbUpperBound);
             } else if (ttInfo.scoreType == ScoreType::LowerBound) {
                 // Can safely raise the lower bound for our search window, because the true value
                 // is guaranteed to be above this bound.
@@ -570,7 +594,7 @@ EvalT MoveSearcher::Impl::search(
                 // If beta was lowered by the tt entry this is an upper bound and we want to return
                 // that lowered beta (fail-soft: that's the tightest upper bound we have).
                 // So either way we return the tt entry score.
-                return ttInfo.score;
+                return clamp(ttInfo.score, tbLowerBound, tbUpperBound);
             }
         }
 
@@ -604,7 +628,7 @@ EvalT MoveSearcher::Impl::search(
                 /*useScoutSearch =*/false);
 
         if (outcome == SearchMoveOutcome::Interrupted) {
-            return bestScore;
+            return clamp(bestScore, tbLowerBound, tbUpperBound);
         }
 
         ++movesSearched;
@@ -624,7 +648,7 @@ EvalT MoveSearcher::Impl::search(
             // Score was obtained from a subcall that failed high, so it was a lower bound for
             // that position. It is also a lower bound for the overall position because we're
             // maximizing.
-            return bestScore;
+            return clamp(bestScore, tbLowerBound, tbUpperBound);
         }
     }
 
@@ -728,7 +752,7 @@ EvalT MoveSearcher::Impl::search(
     //
     // If we're failing high relative to the original beta then we found a lower bound outside the
     // feasibility window so we can safely return a lower bound.
-    return bestScore;
+    return clamp(bestScore, tbLowerBound, tbUpperBound);
 }
 
 // Quiescence search. When in check search all moves, when not in check only search captures.
@@ -1243,6 +1267,10 @@ RootSearchResult MoveSearcher::Impl::searchForBestMove(
     searchStatistics_.selectiveDepth = 0;
 
     moveScorer_.resetCutoffStatistics();
+
+    if (syzygyEnabled_) {
+        rootInTb_ = canProbeSyzgyRoot(gameState);
+    }
 
     const auto reportCutoffStatistics = [this]() {
 #ifdef TRACK_CUTOFF_STATISTICS
