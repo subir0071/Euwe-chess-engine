@@ -368,12 +368,11 @@ FORCE_INLINE void MoveSearcher::Impl::updateTTable(
 
 StackVector<Move> MoveSearcher::Impl::extractPv(
         GameState gameState, StackOfVectors<Move>& stack, const int depth) {
-    // Note: taking copy of gameState
-    // TODO: would make+unmake be faster here?
+    const int maxPvLength = max(depth, searchStatistics_.selectiveDepth);
 
     StackVector<Move> pv = stack.makeStackVector();
 
-    while (pv.size() < depth) {
+    while (pv.size() < maxPvLength) {
         const auto ttHit = tTable_.probe(gameState.getBoardHash());
 
         if (!ttHit) {
