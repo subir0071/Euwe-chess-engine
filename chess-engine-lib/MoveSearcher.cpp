@@ -30,7 +30,7 @@ class MoveSearcher::Impl {
             StackOfVectors<Move>& stack,
             std::optional<EvalT> evalGuess = std::nullopt);
 
-    void prepareForNewSearch(const GameState& gameState);
+    void prepareForNewSearch(const GameState& gameState, const std::vector<Move>* movesToSearch);
 
     void interruptSearch();
 
@@ -131,6 +131,8 @@ class MoveSearcher::Impl {
     MoveScorer moveScorer_;
 
     SearchStatistics searchStatistics_ = {};
+
+    const std::vector<Move>* rootMovesToSearch_ = nullptr;
 
     const IFrontEnd* frontEnd_ = nullptr;
 
@@ -603,7 +605,8 @@ EvalT MoveSearcher::Impl::search(
         }
     }
 
-    auto moves = gameState.generateMoves(stack, enemyControl);
+    auto moves = ply == 0 && rootMovesToSearch_ ? stack.makeStackVector(*rootMovesToSearch_)
+                                                : gameState.generateMoves(stack, enemyControl);
     if (moves.size() == 0) {
         // Exact value
         return evaluateNoLegalMoves(gameState);
@@ -1251,13 +1254,37 @@ RootSearchResult MoveSearcher::Impl::searchForBestMove(
     }
 }
 
-void MoveSearcher::Impl::prepareForNewSearch(const GameState& gameState) {
+void MoveSearcher::Impl::prepareForNewSearch(
+        const GameState& gameState, const std::vector<Move>* movesToSearch) {
     // Set state variables to prepare for search.
     wasInterrupted_ = false;
 
     moveScorer_.prepareForNewSearch(gameState);
 
     ++tTableTick_;
+
+    if (movesToSearch && !movesToSearch->empty()) {
+        rootMovesToSearch_ = movesToSearch;
+
+        // If the hash move at the root is excluded, erase the root node from the TTable.
+        const auto rootTtHit = tTable_.probe(gameState.getBoardHash());
+
+        if (rootTtHit) {
+            const auto hashMove                 = getTTableMove(rootTtHit->payload, gameState);
+            const bool hashMoveShouldBeSearched = std::ranges::contains(*movesToSearch, hashMove);
+
+            if (!hashMoveShouldBeSearched) {
+                tTable_.erase(gameState.getBoardHash());
+            }
+        }
+
+    } else if (rootMovesToSearch_) {
+        rootMovesToSearch_ = nullptr;
+
+        // If we previously had a restriction on moves to search and now we don't, erase the root
+        // node from the TTable to avoid polluting with results from the previous restricted search.
+        tTable_.erase(gameState.getBoardHash());
+    }
 }
 
 void MoveSearcher::Impl::interruptSearch() {
@@ -1323,8 +1350,9 @@ RootSearchResult MoveSearcher::searchForBestMove(
     return impl_->searchForBestMove(gameState, depth, stack, evalGuess);
 }
 
-void MoveSearcher::prepareForNewSearch(const GameState& gameState) {
-    impl_->prepareForNewSearch(gameState);
+void MoveSearcher::prepareForNewSearch(
+        const GameState& gameState, const std::vector<Move>* movesToSearch) {
+    impl_->prepareForNewSearch(gameState, movesToSearch);
 }
 
 void MoveSearcher::interruptSearch() {

@@ -36,7 +36,7 @@ class MoveSearcher {
 
     // Must be called before calling searchForBestMove from a new position or after
     // interruptSearch().
-    void prepareForNewSearch(const GameState& gameState);
+    void prepareForNewSearch(const GameState& gameState, const std::vector<Move>* movesToSearch);
 
     // Call this from a different thread to stop the search prematurely.
     void interruptSearch();

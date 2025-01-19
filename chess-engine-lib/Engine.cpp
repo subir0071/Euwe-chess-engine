@@ -12,7 +12,8 @@ class Engine::Impl {
 
     void newGame();
 
-    [[nodiscard]] SearchInfo findMove(const GameState& gameState);
+    [[nodiscard]] SearchInfo findMove(
+            const GameState& gameState, const std::vector<Move>& searchMoves);
 
     void interruptSearch();
 
@@ -50,19 +51,35 @@ void Engine::Impl::newGame() {
     moveSearcher_.newGame();
 }
 
-SearchInfo Engine::Impl::findMove(const GameState& gameState) {
+SearchInfo Engine::Impl::findMove(
+        const GameState& gameState, const std::vector<Move>& searchMoves) {
     int maxDepth = MoveSearcher::kMaxDepth;
 
-    {
-        const auto moves = gameState.generateMoves(moveStack_);
-        if (moves.size() == 1) {
-            // Only one legal move. We still search to get a score and a PV.
-            // Search to depth 2 to get a guess for the opponent's follow-up move.
-            maxDepth = 2;
+    auto allLegalMoves = gameState.generateMoves(moveStack_);
+    if (allLegalMoves.size() == 1) {
+        // Only one legal move. We still search to get a score and a PV.
+        // Search to depth 2 to get a guess for the opponent's follow-up move.
+        maxDepth = 2;
+    }
+
+    for (const auto& move : searchMoves) {
+        bool isLegal = false;
+        for (const auto& legalMove : allLegalMoves) {
+            if (move == legalMove) {
+                isLegal = true;
+                break;
+            }
+        }
+
+        if (!isLegal) {
+            throw std::invalid_argument(
+                    "Requested move to search is not legal: " + move.toExtendedString());
         }
     }
 
-    moveSearcher_.prepareForNewSearch(gameState);
+    const std::vector<Move>* movesToSearch = searchMoves.empty() ? nullptr : &searchMoves;
+
+    moveSearcher_.prepareForNewSearch(gameState, movesToSearch);
 
     GameState copyState(gameState);
 
@@ -154,8 +171,8 @@ void Engine::newGame() {
     impl_->newGame();
 }
 
-SearchInfo Engine::findMove(const GameState& gameState) {
-    return impl_->findMove(gameState);
+SearchInfo Engine::findMove(const GameState& gameState, const std::vector<Move>& searchMoves) {
+    return impl_->findMove(gameState, searchMoves);
 }
 
 void Engine::interruptSearch() {

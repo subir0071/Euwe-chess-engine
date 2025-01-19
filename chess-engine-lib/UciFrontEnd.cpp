@@ -374,7 +374,7 @@ void UciFrontEnd::Impl::handlePosition(std::stringstream& lineSStream) {
 }
 
 void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
-    // Not implemented: searchmoves, ponder, mate
+    // Not implemented: ponder, mate
 
     const std::string ourTimeString = gameState_.getSideToMove() == Side::White ? "wtime" : "btime";
     const std::string ourIncString  = gameState_.getSideToMove() == Side::White ? "winc" : "binc";
@@ -387,9 +387,15 @@ void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
     std::optional<std::chrono::milliseconds> fixedTime     = std::nullopt;
     bool isInfinite                                        = false;
 
+    std::vector<Move> searchMoves;
+
+    std::string excessToken;
     while (lineSStream) {
         std::string token;
-        if (!(lineSStream >> token)) {
+        if (!excessToken.empty()) {
+            token = excessToken;
+            excessToken.clear();
+        } else if (!(lineSStream >> token)) {
             break;
         }
 
@@ -425,6 +431,36 @@ void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
             }
         } else if (token == "infinite") {
             isInfinite = true;
+        } else if (token == "searchmoves") {
+            std::array specialTokens = {
+                    "ponder",
+                    "wtime",
+                    "btime",
+                    "winc",
+                    "binc",
+                    "movestogo",
+                    "depth",
+                    "nodes",
+                    "mate",
+                    "movetime",
+                    "infinite"};
+
+            while (lineSStream >> token) {
+                if (std::ranges::contains(specialTokens, token)) {
+                    excessToken = token;
+                    break;
+                }
+
+                try {
+                    const Move move = Move::fromUci(token, gameState_);
+                    doBasicSanityChecks(move, gameState_);
+
+                    searchMoves.push_back(move);
+                } catch (const std::exception& e) {
+                    writeDebug("Error: Failed to parse search move '{}': {}", token, e.what());
+                    return;
+                }
+            }
         }
     }
 
@@ -453,10 +489,14 @@ void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
     MY_ASSERT(!goFuture_.valid());
 
     goFuture_ = std::async(std::launch::async, [=, this] {
-        const auto searchInfo = engine_.findMove(gameState_);
+        try {
+            const auto searchInfo = engine_.findMove(gameState_, searchMoves);
 
-        writeUci("bestmove {}", searchInfo.principalVariation[0].toUci());
-        std::flush(out_);
+            writeUci("bestmove {}", searchInfo.principalVariation[0].toUci());
+            std::flush(out_);
+        } catch (const std::exception& e) {
+            writeDebug("Error: {}", e.what());
+        }
     });
 }
 

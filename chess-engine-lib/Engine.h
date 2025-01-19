@@ -18,7 +18,8 @@ class Engine final : public IEngine {
 
     void newGame() override;
 
-    [[nodiscard]] SearchInfo findMove(const GameState& gameState) override;
+    [[nodiscard]] SearchInfo findMove(
+            const GameState& gameState, const std::vector<Move>& searchMoves) override;
 
     void interruptSearch() override;
 

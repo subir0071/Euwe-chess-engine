@@ -33,6 +33,14 @@ class StackOfVectors {
         return StackVector<T>(*this);
     }
 
+    StackVector<T> makeStackVector(const std::vector<T>& items) {
+        auto stackVector = makeStackVector();
+        for (const auto& item : items) {
+            stackVector.push_back(item);
+        }
+        return stackVector;
+    }
+
     size_t size() const { return items_.size(); }
 
   private:

@@ -19,7 +19,8 @@ class IEngine {
 
     virtual void newGame() = 0;
 
-    [[nodiscard]] virtual SearchInfo findMove(const GameState& gameState) = 0;
+    [[nodiscard]] virtual SearchInfo findMove(
+            const GameState& gameState, const std::vector<Move>& searchMoves) = 0;
 
     virtual void interruptSearch() = 0;
 

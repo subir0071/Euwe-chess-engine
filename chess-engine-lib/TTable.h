@@ -50,6 +50,9 @@ class TTable {
     template <typename FuncT>
     void store(const EntryT& entry, FuncT&& isMoreValuable);
 
+    // Returns true if an entry was erased.
+    bool erase(HashT hash);
+
     [[nodiscard]] int getNumInUse() const { return numInUse_; }
     [[nodiscard]] float getUtilization() const { return static_cast<float>(numInUse_) / size_; }
 
@@ -152,6 +155,33 @@ void TTable<PayloadT>::store(const TTEntry<PayloadT>& entryToStore, FuncT&& isMo
         }
         recentEntry = entryToStore;
     }
+}
+
+template <typename PayloadT>
+FORCE_INLINE bool TTable<PayloadT>::erase(const HashT hash) {
+    const std::size_t index         = computeIndex(hash);
+    const std::size_t valuableIndex = index;
+    const std::size_t recentIndex   = index | 1;
+
+    EntryT& valuableEntry = data_[valuableIndex];
+    EntryT& recentEntry   = data_[recentIndex];
+
+    if (valuableEntry.hash == hash) {
+        valuableEntry = recentEntry;
+        recentEntry   = {};
+        --numInUse_;
+
+        return true;
+    }
+
+    if (recentEntry.hash == hash) {
+        recentEntry = {};
+        --numInUse_;
+
+        return true;
+    }
+
+    return false;
 }
 
 template <typename PayloadT>
