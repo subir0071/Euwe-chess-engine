@@ -524,6 +524,10 @@ FORCE_INLINE BitBoard getSliderAttack(
 
 }  // namespace
 
+FORCE_INLINE BitBoard getPawnControlledSquares(const BoardPosition position, const Side side) {
+    return getPawnControlledSquares(BitBoard::Empty | position, side);
+}
+
 FORCE_INLINE BitBoard getPawnControlledSquares(const BitBoard pawnBitBoard, const Side side) {
     auto leftForwardShift = [=](const BitBoard bitBoard) FORCE_INLINE {
         return side == Side::White ? (BitBoard)(((std::uint64_t)bitBoard & notWestFileMask) << 7)

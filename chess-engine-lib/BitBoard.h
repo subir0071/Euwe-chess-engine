@@ -60,26 +60,27 @@ enum class InverseBoardPosition : std::uint8_t {};
     return static_cast<InverseBoardPosition>(position);
 }
 
-[[nodiscard]] constexpr BitBoard operator&(const BitBoard bitboard, InverseBoardPosition position) {
+[[nodiscard]] constexpr BitBoard operator&(
+        const BitBoard bitboard, const InverseBoardPosition position) {
     return (BitBoard)((std::uint64_t)bitboard & ~(1ULL << (int)position));
 }
 
-constexpr BitBoard& operator&=(BitBoard& bitboard, InverseBoardPosition position) {
+constexpr BitBoard& operator&=(BitBoard& bitboard, const InverseBoardPosition position) {
     bitboard = bitboard & position;
     return bitboard;
 }
 
-[[nodiscard]] constexpr BoardPosition getFirstSetPosition(BitBoard bitBoard) {
+[[nodiscard]] constexpr BoardPosition getFirstSetPosition(const BitBoard bitBoard) {
     return (BoardPosition)std::countr_zero((std::uint64_t)bitBoard);
 }
 
-[[nodiscard]] constexpr BoardPosition popFirstSetPosition(BitBoard& bitBoard) {
+constexpr BoardPosition popFirstSetPosition(BitBoard& bitBoard) {
     const BoardPosition position = getFirstSetPosition(bitBoard);
     bitBoard = (BitBoard)((std::uint64_t)bitBoard & ((std::uint64_t)bitBoard - 1ull));
     return position;
 }
 
-[[nodiscard]] constexpr BitBoard getFirstSetBitBoard(BitBoard bitBoard) {
+[[nodiscard]] constexpr BitBoard getFirstSetBitBoard(const BitBoard bitBoard) {
     return (BitBoard)std::bit_floor((std::uint64_t)bitBoard);
 }
 

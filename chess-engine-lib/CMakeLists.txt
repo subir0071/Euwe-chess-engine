@@ -21,6 +21,7 @@ set(
     "TimeManager.cpp"
     "UciFrontEnd.cpp"
     "EvalParams.cpp"
+    "Pyrrhic/tbprobe.cpp"
 )
 
 get_filename_component(PARENT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ ABSOLUTE)

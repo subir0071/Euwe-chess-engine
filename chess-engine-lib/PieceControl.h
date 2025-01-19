@@ -6,6 +6,7 @@
 #include "Side.h"
 
 BitBoard getPawnControlledSquares(BitBoard pawnBitBoard, Side side);
+BitBoard getPawnControlledSquares(BoardPosition position, Side side);
 
 BitBoard getKingControlledSquares(BoardPosition position);
 
