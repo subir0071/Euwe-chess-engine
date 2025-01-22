@@ -505,6 +505,11 @@ void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
         try {
             const auto searchInfo = engine_.findMove(gameState_, searchMoves);
 
+            if (searchInfo.principalVariation.empty()) {
+                writeDebug("Error: No principal variation found.");
+                std::abort();
+            }
+
             writeUci("bestmove {}", searchInfo.principalVariation[0].toUci());
             std::flush(out_);
         } catch (const std::exception& e) {
