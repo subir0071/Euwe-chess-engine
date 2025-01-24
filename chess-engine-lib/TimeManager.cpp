@@ -6,20 +6,20 @@
 
 namespace {
 
+constexpr int kInterruptCheckInterval = 32;
+
 [[nodiscard]] bool timeIsUp(const std::chrono::high_resolution_clock::time_point deadLine) {
     return std::chrono::high_resolution_clock::now() >= deadLine;
 }
 
 [[nodiscard]] bool shouldInterrupt(
         const std::chrono::high_resolution_clock::time_point deadLine, int& interruptCheckCounter) {
-    static constexpr int interruptCheckInterval = 32;
-
     if (interruptCheckCounter > 0) {
         --interruptCheckCounter;
         return false;
     }
 
-    interruptCheckCounter = interruptCheckInterval;
+    interruptCheckCounter = kInterruptCheckInterval;
 
     return timeIsUp(deadLine);
 }
@@ -106,7 +106,7 @@ void TimeManager::configureForTimeControl(
         const std::chrono::milliseconds increment,
         const int movesToGo,
         const GameState& gameState) {
-    startTime_ = std::chrono::high_resolution_clock::now();
+    startNewSession();
 
     const int expectedGameLength = 40;
     const int expectedMovesLeft =
@@ -134,13 +134,13 @@ void TimeManager::configureForTimeControl(
 }
 
 void TimeManager::configureForInfiniteSearch() {
-    startTime_ = std::chrono::high_resolution_clock::now();
+    startNewSession();
 
     mode_ = TimeManagementMode::Infinite;
 }
 
 void TimeManager::configureForFixedTimeSearch(const std::chrono::milliseconds time) {
-    startTime_ = std::chrono::high_resolution_clock::now();
+    startNewSession();
 
     mode_         = TimeManagementMode::FixedTime;
     softDeadLine_ = startTime_ + time - moveOverhead_;
@@ -148,14 +148,14 @@ void TimeManager::configureForFixedTimeSearch(const std::chrono::milliseconds ti
 }
 
 void TimeManager::configureForFixedDepthSearch(const int depth) {
-    startTime_ = std::chrono::high_resolution_clock::now();
+    startNewSession();
 
     mode_        = TimeManagementMode::FixedDepth;
     depthTarget_ = depth;
 }
 
 void TimeManager::configureForFixedNodesSearch(const std::uint64_t nodes) {
-    startTime_ = std::chrono::high_resolution_clock::now();
+    startNewSession();
 
     mode_        = TimeManagementMode::FixedNodes;
     nodesTarget_ = nodes;
@@ -164,4 +164,9 @@ void TimeManager::configureForFixedNodesSearch(const std::uint64_t nodes) {
 std::chrono::milliseconds TimeManager::getTimeElapsed() const {
     const auto elapsed = std::chrono::high_resolution_clock::now() - startTime_;
     return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
+}
+
+void TimeManager::startNewSession() {
+    startTime_             = std::chrono::high_resolution_clock::now();
+    interruptCheckCounter_ = kInterruptCheckInterval;
 }

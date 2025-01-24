@@ -45,6 +45,8 @@ class TimeManager {
         FixedNodes
     };
 
+    void startNewSession();
+
     TimeManagementMode mode_ = TimeManagementMode::None;
 
     std::chrono::high_resolution_clock::time_point startTime_{};

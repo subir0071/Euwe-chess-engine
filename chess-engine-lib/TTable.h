@@ -11,7 +11,13 @@
 
 #include <cstdint>
 
-enum ScoreType : std::uint8_t { NotSet, Exact, LowerBound, UpperBound };
+enum ScoreType : std::uint8_t {
+    NotSet     = 0,
+    Exact      = 1,
+    LowerBound = 2,
+    UpperBound = 3,
+    EGTB       = 4,
+};
 
 template <typename PayloadT>
 struct TTEntry {
@@ -88,9 +94,7 @@ TTable<PayloadT>::TTable(const std::size_t requestedSize) : size_(std::bit_floor
 
 template <typename PayloadT>
 void TTable<PayloadT>::clear() {
-    for (std::size_t i = 0; i < size_; ++i) {
-        data_[i] = EntryT{};
-    }
+    std::memset(data_.get(), 0, size_ * sizeof(EntryT));
     numInUse_ = 0;
 }
 

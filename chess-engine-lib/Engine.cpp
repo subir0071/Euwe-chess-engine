@@ -89,14 +89,14 @@ SearchInfo Engine::Impl::findMove(
         }
     }
 
-    bool probedSyzygy = false;
+    bool tbHit = false;
 
     // Find moves that are optimal based on Syzygy tablebases.
     std::vector<Move> syzygyRootMoves;
     if (hasSyzygy_ && canProbeSyzgyRoot(gameState)) {
         syzygyRootMoves = getSyzygyRootMoves(gameState);
 
-        probedSyzygy = true;
+        tbHit = !syzygyRootMoves.empty();
     }
 
     // If searchMoves was provided, filter optimal moves to that.
@@ -114,10 +114,10 @@ SearchInfo Engine::Impl::findMove(
     // - All requested moves to search.
     // - All TB optimal moves.
     // - All moves (nullptr).
-    const std::vector<Move>* movesToSearch = !syzygySearchMoves.empty() ? &syzygySearchMoves
-                                           : !searchMoves.empty()       ? &searchMoves
-                                           : !syzygyRootMoves.empty()   ? &syzygyRootMoves
-                                                                        : nullptr;
+    const std::vector<Move>* const movesToSearch = !syzygySearchMoves.empty() ? &syzygySearchMoves
+                                                 : !searchMoves.empty()       ? &searchMoves
+                                                 : !syzygyRootMoves.empty()   ? &syzygyRootMoves
+                                                                              : nullptr;
 
     if (movesToSearch && movesToSearch->size() == 1 && searchMoves.size() != 1) {
         // Only one move to search. We still search to get a score and a PV.
@@ -127,11 +127,10 @@ SearchInfo Engine::Impl::findMove(
         maxDepth = 2;
     }
 
-    moveSearcher_.prepareForNewSearch(gameState, movesToSearch);
+    moveSearcher_.resetSearchStatistics();
+    moveSearcher_.prepareForNewSearch(gameState, movesToSearch, tbHit);
 
     GameState copyState(gameState);
-
-    moveSearcher_.resetSearchStatistics();
 
     std::optional<EvalT> evalGuess = std::nullopt;
     SearchInfo searchInfo;
@@ -153,10 +152,6 @@ SearchInfo Engine::Impl::findMove(
         searchInfo.score      = searchResult.eval;
         searchInfo.depth      = depth;
         searchInfo.statistics = searchStatistics;
-
-        if (probedSyzygy) {
-            searchInfo.statistics.tbHits = searchInfo.statistics.tbHits.value_or(0) + 1;
-        }
 
         if (searchResult.wasInterrupted) {
             if (frontEnd_) {

@@ -33,7 +33,8 @@ class MoveSearcher::Impl {
             StackOfVectors<Move>& stack,
             std::optional<EvalT> evalGuess = std::nullopt);
 
-    void prepareForNewSearch(const GameState& gameState, const std::vector<Move>* movesToSearch);
+    void prepareForNewSearch(
+            const GameState& gameState, const std::vector<Move>* movesToSearch, bool tbHitAtRoot);
 
     void interruptSearch();
 
@@ -66,6 +67,8 @@ class MoveSearcher::Impl {
             Move bestMove,
             int depth,
             HashT hash);
+
+    void storeEgtbValueInTTable(const EvalT value, const int depth, const HashT hash);
 
     // Extract the principal variation from the transposition table.
     [[nodiscard]] StackVector<Move> extractPv(
@@ -127,12 +130,14 @@ class MoveSearcher::Impl {
     mutable std::atomic<bool> stopSearch_ = false;
     mutable bool wasInterrupted_          = false;
 
-    std::uint8_t tTableTick_ = 0;
-
-    SearchTTable tTable_ = {};
-
     bool rootInTb_      = false;
     bool syzygyEnabled_ = false;
+
+    std::uint8_t tTableTick_ = 0;
+
+    int syzygyMinProbeDepth_ = 2;
+
+    SearchTTable tTable_ = {};
 
     MoveScorer moveScorer_;
 
@@ -140,7 +145,7 @@ class MoveSearcher::Impl {
 
     const std::vector<Move>* rootMovesToSearch_ = nullptr;
 
-    const IFrontEnd* frontEnd_ = nullptr;
+    IFrontEnd* frontEnd_ = nullptr;
 
     const TimeManager& timeManager_;
 
@@ -248,7 +253,12 @@ FORCE_INLINE std::int8_t computeWrappingTickDelta(std::uint8_t tickA, std::uint8
     return signedTickDelta;
 }
 
-FORCE_INLINE Move getTTableMove(const SearchTTPayload payload, const GameState& gameState) {
+FORCE_INLINE std::optional<Move> getTTableMove(
+        const SearchTTPayload payload, const GameState& gameState) {
+    if (payload.moveFrom == payload.moveTo) {
+        return std::nullopt;
+    }
+
     return Move{
             .pieceToMove = getPiece(gameState.getPieceOnSquare(payload.moveFrom)),
             .from        = payload.moveFrom,
@@ -278,6 +288,34 @@ FORCE_INLINE Move getTTableMove(const SearchTTPayload payload, const GameState& 
     return false;
 }
 
+[[nodiscard]] FORCE_INLINE bool isTTEntryMoreValuable(
+        const SearchTTPayload& newPayload, const SearchTTPayload& oldPayload) {
+    const int tickDelta        = computeWrappingTickDelta(newPayload.tick, oldPayload.tick);
+    const int compensatedDepth = (int)newPayload.depth + tickDelta;
+
+    if (compensatedDepth != (int)oldPayload.depth) {
+        // If new entry is deeper (biased for recency), consider it more valuable.
+        return compensatedDepth > (int)oldPayload.depth;
+    }
+
+    const bool newIsEgtb = newPayload.scoreType == ScoreType::EGTB;
+    const bool oldIsEgtb = oldPayload.scoreType == ScoreType::EGTB;
+    if (newIsEgtb != oldIsEgtb) {
+        // Otherwise, if one of them is an EGTB value, consider that one more valuable.
+        return newIsEgtb;
+    }
+
+    const bool newIsExact = newPayload.scoreType == ScoreType::Exact;
+    const bool oldIsExact = oldPayload.scoreType == ScoreType::Exact;
+    if (newIsExact != oldIsExact) {
+        // Otherwise, if one of them is an exact value, consider that one more valuable.
+        return newIsExact;
+    }
+
+    // Break ties in favor of the newer entry;
+    return true;
+}
+
 }  // namespace
 
 MoveSearcher::Impl::Impl(const TimeManager& timeManager, const Evaluator& evaluator)
@@ -287,11 +325,22 @@ MoveSearcher::Impl::Impl(const TimeManager& timeManager, const Evaluator& evalua
 
 void MoveSearcher::Impl::setFrontEnd(IFrontEnd* frontEnd) {
     frontEnd_ = frontEnd;
+
+    frontEnd_->addOption(
+            FrontEndOption::createInteger("SyzygyProbeDepth", syzygyMinProbeDepth_, 1, 100));
 }
 
 void MoveSearcher::Impl::setSyzygyEnabled(const bool enabled) {
+    if (syzygyEnabled_ == enabled) {
+        return;
+    }
+
     syzygyEnabled_           = enabled;
-    searchStatistics_.tbHits = 0;
+    searchStatistics_.tbHits = searchStatistics_.tbHits.value_or(0);
+
+    if (tTable_.getNumInUse() > 0) {
+        tTable_.clear();
+    }
 }
 
 void MoveSearcher::Impl::newGame() {
@@ -299,6 +348,8 @@ void MoveSearcher::Impl::newGame() {
 
     stopSearch_     = false;
     wasInterrupted_ = false;
+
+    rootInTb_ = false;
 
     moveScorer_.newGame();
 
@@ -354,27 +405,24 @@ FORCE_INLINE void MoveSearcher::Impl::updateTTable(
                     .moveFlags = bestMove.flags,
             }};
 
-    const auto isMoreValuable = [](const SearchTTPayload& newPayload,
-                                   const SearchTTPayload& oldPayload) FORCE_INLINE {
-        const int tickDelta        = computeWrappingTickDelta(newPayload.tick, oldPayload.tick);
-        const int compensatedDepth = (int)newPayload.depth + tickDelta;
-        if (compensatedDepth > (int)oldPayload.depth) {
-            // If new entry is deeper (biased for recency), consider it more valuable.
-            return true;
-        } else if (compensatedDepth == (int)oldPayload.depth) {
-            // If the old and new entry are of equal depth:
-            //  - If the new entry is exact, consider it more valuable (if old one is also exact, we
-            //    prefer the new one).
-            //  - If neither the old nor the new entry are exact, we prefer the new one.
-            return newPayload.scoreType == ScoreType::Exact
-                || oldPayload.scoreType != ScoreType::Exact;
-        } else {
-            // Older entry is deeper, retain it.
-            return false;
-        }
-    };
+    tTable_.store(entry, isTTEntryMoreValuable);
+}
 
-    tTable_.store(entry, isMoreValuable);
+FORCE_INLINE void MoveSearcher::Impl::storeEgtbValueInTTable(
+        const EvalT value, const int depth, const HashT hash) {
+    const SearchTTable::EntryT entry = {
+            .hash    = hash,
+            .payload = {
+                    .score     = value,
+                    .depth     = (std::uint8_t)depth,
+                    .tick      = tTableTick_,
+                    .scoreType = ScoreType::EGTB,
+                    .moveFrom  = (BoardPosition)0,
+                    .moveTo    = (BoardPosition)0,
+                    .moveFlags = MoveFlags::None,
+            }};
+
+    tTable_.store(entry, isTTEntryMoreValuable);
 }
 
 StackVector<Move> MoveSearcher::Impl::extractPv(
@@ -390,10 +438,13 @@ StackVector<Move> MoveSearcher::Impl::extractPv(
             break;
         }
 
-        const Move move = getTTableMove(ttHit->payload, gameState);
+        const auto move = getTTableMove(ttHit->payload, gameState);
+        if (!move) {
+            break;
+        }
 
-        pv.push_back(move);
-        (void)gameState.makeMove(move);
+        pv.push_back(*move);
+        (void)gameState.makeMove(*move);
     }
 
     pv.lock();
@@ -432,50 +483,8 @@ EvalT MoveSearcher::Impl::search(
     // alphaOrig determines whether the value returned is an upper bound
     const EvalT alphaOrig = alpha;
 
-    EvalT tbLowerBound = -kInfiniteEval;
-    EvalT tbUpperBound = kInfiniteEval;
-
-    constexpr int kSyzygyMinProbeDepth = 5;
-    if (syzygyEnabled_ && !rootInTb_ && ply > 0 && depth >= kSyzygyMinProbeDepth
-        && canProbeSyzgyWdl(gameState)) {
-        timeManager_.forceNextCheck();
-        if (shouldStopSearch()) {
-            return -kInfiniteEval;
-        }
-
-        const auto maybeTbScore = probeSyzygyWdl(gameState);
-        timeManager_.forceNextCheck();
-
-        if (maybeTbScore) {
-            const EvalT tbScore = *maybeTbScore;
-
-            *searchStatistics_.tbHits += 1;
-
-            if (!isMate(tbScore)) {
-                // TB probe indicates draw; draw scores are exact, so no need to continue searching.
-                return tbScore;
-            }
-
-            if (tbScore > 0) {
-                // TB probe indicates a win. But we don't know distance to mate, so this is only a lower
-                // bound.
-                alpha        = max(alpha, tbScore);
-                tbLowerBound = tbScore;
-            } else {
-                // TB probe indicates a loss. But we don't know distance to mate, so this is only an
-                // upper bound.
-                beta         = min(beta, tbScore);
-                tbUpperBound = tbScore;
-            }
-
-            if (alpha >= beta) {
-                return tbScore;
-            }
-        }
-    }
-
     if (shouldStopSearch()) {
-        return clamp((EvalT)-kInfiniteEval, tbLowerBound, tbUpperBound);
+        return -kInfiniteEval;
     }
 
     if (ply > 0) {
@@ -545,7 +554,7 @@ EvalT MoveSearcher::Impl::search(
         updateMateDistance(nullMoveScore);
 
         if (wasInterrupted_) {
-            return clamp((EvalT)-kInfiniteEval, tbLowerBound, tbUpperBound);
+            return -kInfiniteEval;
         }
 
         if (nullMoveScore >= beta) {
@@ -558,18 +567,27 @@ EvalT MoveSearcher::Impl::search(
         }
     }
 
-    EvalT bestScore = -kInfiniteEval;
-    Move bestMove{};
-    int movesSearched = 0;
+    // Probe the transposition table and use the stored score and/or move if we get a hit.
+    auto ttHit = tTable_.probe(gameState.getBoardHash());
+
+    if (rootInTb_ && ttHit->payload.scoreType == ScoreType::EGTB) {
+        // When the root is already in the endgame tablebase, we no longer want to use tablebase
+        // values in the search.
+        tTable_.erase(gameState.getBoardHash());
+        ttHit = std::nullopt;
+    }
 
     std::optional<Move> hashMove = std::nullopt;
 
-    // Probe the transposition table and use the stored score and/or move if we get a hit.
-    const auto ttHit = tTable_.probe(gameState.getBoardHash());
     if (ttHit) {
         const auto& ttInfo = ttHit->payload;
 
         searchStatistics_.tTableHits++;
+
+        if (ttInfo.scoreType == ScoreType::EGTB) {
+            // Exact value
+            return ttInfo.score;
+        }
 
         if (ttInfo.depth >= depth) {
             if (ttInfo.scoreType == ScoreType::Exact) {
@@ -578,7 +596,7 @@ EvalT MoveSearcher::Impl::search(
                             max(searchStatistics_.selectiveDepth, ply + ttInfo.depth);
                 }
                 // Exact value
-                return clamp(ttInfo.score, tbLowerBound, tbUpperBound);
+                return ttInfo.score;
             } else if (ttInfo.scoreType == ScoreType::LowerBound) {
                 // Can safely raise the lower bound for our search window, because the true value
                 // is guaranteed to be above this bound.
@@ -599,7 +617,7 @@ EvalT MoveSearcher::Impl::search(
                 // If beta was lowered by the tt entry this is an upper bound and we want to return
                 // that lowered beta (fail-soft: that's the tightest upper bound we have).
                 // So either way we return the tt entry score.
-                return clamp(ttInfo.score, tbLowerBound, tbUpperBound);
+                return ttInfo.score;
             }
         }
 
@@ -613,7 +631,29 @@ EvalT MoveSearcher::Impl::search(
         }
 
         hashMove = getTTableMove(ttInfo, gameState);
+    }
 
+    if (syzygyEnabled_ && !rootInTb_ && ply > 0 && depth >= syzygyMinProbeDepth_
+        && canProbeSyzgyWdl(gameState)) {
+        const auto maybeTbScore = probeSyzygyWdl(gameState);
+        timeManager_.forceNextCheck();
+
+        if (maybeTbScore) {
+            const EvalT tbScore = *maybeTbScore;
+
+            *searchStatistics_.tbHits += 1;
+
+            storeEgtbValueInTTable(tbScore, depth, gameState.getBoardHash());
+
+            return tbScore;
+        }
+    }
+
+    EvalT bestScore = -kInfiniteEval;
+    Move bestMove{};
+    int movesSearched = 0;
+
+    if (hashMove) {
         // Try hash move first.
         // Do we need a legality check here for hash collisions?
         const auto outcome = searchMove(
@@ -633,7 +673,7 @@ EvalT MoveSearcher::Impl::search(
                 /*useScoutSearch =*/false);
 
         if (outcome == SearchMoveOutcome::Interrupted) {
-            return clamp(bestScore, tbLowerBound, tbUpperBound);
+            return bestScore;
         }
 
         ++movesSearched;
@@ -653,7 +693,7 @@ EvalT MoveSearcher::Impl::search(
             // Score was obtained from a subcall that failed high, so it was a lower bound for
             // that position. It is also a lower bound for the overall position because we're
             // maximizing.
-            return clamp(bestScore, tbLowerBound, tbUpperBound);
+            return bestScore;
         }
     }
 
@@ -757,7 +797,7 @@ EvalT MoveSearcher::Impl::search(
     //
     // If we're failing high relative to the original beta then we found a lower bound outside the
     // feasibility window so we can safely return a lower bound.
-    return clamp(bestScore, tbLowerBound, tbUpperBound);
+    return bestScore;
 }
 
 // Quiescence search. When in check search all moves, when not in check only search captures.
@@ -856,8 +896,8 @@ EvalT MoveSearcher::Impl::quiesce(
 
         hashMove = getTTableMove(ttInfo, gameState);
 
-        bool shouldTryHashMove = true;
-        if (!isInCheck) {
+        bool shouldTryHashMove = hashMove.has_value();
+        if (hashMove && !isInCheck) {
             if (!isCapture(hashMove->flags)) {
                 shouldTryHashMove = false;
             } else {
@@ -1273,10 +1313,6 @@ RootSearchResult MoveSearcher::Impl::searchForBestMove(
 
     moveScorer_.resetCutoffStatistics();
 
-    if (syzygyEnabled_) {
-        rootInTb_ = canProbeSyzgyRoot(gameState);
-    }
-
     const auto reportCutoffStatistics = [this]() {
 #ifdef TRACK_CUTOFF_STATISTICS
         std::stringstream ss;
@@ -1311,7 +1347,9 @@ RootSearchResult MoveSearcher::Impl::searchForBestMove(
 }
 
 void MoveSearcher::Impl::prepareForNewSearch(
-        const GameState& gameState, const std::vector<Move>* movesToSearch) {
+        const GameState& gameState,
+        const std::vector<Move>* const movesToSearch,
+        const bool tbHitAtRoot) {
     // Set state variables to prepare for search.
     wasInterrupted_ = false;
 
@@ -1326,11 +1364,14 @@ void MoveSearcher::Impl::prepareForNewSearch(
         const auto rootTtHit = tTable_.probe(gameState.getBoardHash());
 
         if (rootTtHit) {
-            const auto hashMove                 = getTTableMove(rootTtHit->payload, gameState);
-            const bool hashMoveShouldBeSearched = std::ranges::contains(*movesToSearch, hashMove);
+            const auto hashMove = getTTableMove(rootTtHit->payload, gameState);
+            if (hashMove) {
+                const bool hashMoveShouldBeSearched =
+                        std::ranges::contains(*movesToSearch, *hashMove);
 
-            if (!hashMoveShouldBeSearched) {
-                tTable_.erase(gameState.getBoardHash());
+                if (!hashMoveShouldBeSearched) {
+                    tTable_.erase(gameState.getBoardHash());
+                }
             }
         }
 
@@ -1340,6 +1381,11 @@ void MoveSearcher::Impl::prepareForNewSearch(
         // If we previously had a restriction on moves to search and now we don't, erase the root
         // node from the TTable to avoid polluting with results from the previous restricted search.
         tTable_.erase(gameState.getBoardHash());
+    }
+
+    rootInTb_ = tbHitAtRoot;
+    if (tbHitAtRoot) {
+        searchStatistics_.tbHits = searchStatistics_.tbHits.value_or(0) + 1;
     }
 }
 
@@ -1415,8 +1461,10 @@ RootSearchResult MoveSearcher::searchForBestMove(
 }
 
 void MoveSearcher::prepareForNewSearch(
-        const GameState& gameState, const std::vector<Move>* movesToSearch) {
-    impl_->prepareForNewSearch(gameState, movesToSearch);
+        const GameState& gameState,
+        const std::vector<Move>* const movesToSearch,
+        const bool tbHitAtRoot) {
+    impl_->prepareForNewSearch(gameState, movesToSearch, tbHitAtRoot);
 }
 
 void MoveSearcher::interruptSearch() {
