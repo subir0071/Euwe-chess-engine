@@ -8,6 +8,7 @@
 class Engine::Impl {
   public:
     Impl();
+    ~Impl();
 
     TimeManager& getTimeManager();
 
@@ -42,6 +43,13 @@ Engine::Impl::Impl()
     : evaluator_(EvalParams::getDefaultParams(), /*usePawnKingEvalHashTable*/ true),
       moveSearcher_(timeManager_, evaluator_) {
     moveStack_.reserve(1'000);
+}
+
+Engine::Impl::~Impl() {
+    if (hasSyzygy_) {
+        tearDownSyzygy();
+        hasSyzygy_ = false;
+    }
 }
 
 TimeManager& Engine::Impl::getTimeManager() {
@@ -200,11 +208,10 @@ EvalT Engine::Impl::evaluate(const GameState& gameState) const {
 void Engine::Impl::initializeSyzygy(const std::filesystem::path& syzygyDir) {
     if (hasSyzygy_) {
         tearDownSyzygy();
+        hasSyzygy_ = false;
     }
 
-    if (syzygyDir.empty()) {
-        hasSyzygy_ = false;
-    } else {
+    if (!syzygyDir.empty()) {
         initSyzygy(syzygyDir);
         hasSyzygy_ = true;
     }
