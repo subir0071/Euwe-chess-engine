@@ -582,14 +582,21 @@ EvalT MoveSearcher::Impl::search(
     if (ttHit) {
         const auto& ttInfo = ttHit->payload;
 
+        hashMove = getTTableMove(ttInfo, gameState);
+
         searchStatistics_.tTableHits++;
 
-        if (ttInfo.scoreType == ScoreType::EGTB) {
+        // If TT hit is an EGTB value we can return it directly.
+        // However, if we're at the root, force a further search to get at least one move in the PV.
+        if (ttInfo.scoreType == ScoreType::EGTB && ply > 0) {
             // Exact value
             return ttInfo.score;
         }
 
-        if (ttInfo.depth >= depth) {
+        // If the TT hit is from a deeper search, use the stored value to return early or to update
+        // our bounds. However, if we're at the root and there is no hash move, skip this step and
+        // force a further search to get at least one move in the PV.
+        if (ttInfo.depth >= depth && (ply > 0 || hashMove.has_value())) {
             if (ttInfo.scoreType == ScoreType::Exact) {
                 if (isPvNode) {
                     searchStatistics_.selectiveDepth =
@@ -629,8 +636,6 @@ EvalT MoveSearcher::Impl::search(
         } else if (ttInfo.scoreType == UpperBound) {
             eval = min(eval, ttInfo.score);
         }
-
-        hashMove = getTTableMove(ttInfo, gameState);
     }
 
     if (syzygyEnabled_ && !rootInTb_ && ply > 0 && depth >= syzygyMinProbeDepth_
