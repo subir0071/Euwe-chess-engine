@@ -59,7 +59,7 @@ std::vector<Move> getSyzygyRootMoves(const GameState& gameState) {
 
     TbRootMoves tbRootMoves;
 
-    const int probeResult = tb_probe_root_dtz(
+    int probeResult = tb_probe_root_dtz(
             getSyzygyOccupancy(gameState, Side::White),
             getSyzygyOccupancy(gameState, Side::Black),
             getSyzygyPieceBb(gameState, Piece::King),
@@ -74,11 +74,34 @@ std::vector<Move> getSyzygyRootMoves(const GameState& gameState) {
             gameState.isRepetition(2),
             &tbRootMoves);
 
-    MY_ASSERT_DEBUG(probeResult != 0);
-    MY_ASSERT_DEBUG(tbRootMoves.size > 0);
     if (probeResult == 0 || tbRootMoves.size == 0) {
-        return {};
+        if (!gameState.isRepetition(2)) {
+            // Use WDL probe as a fallback.
+            // Only do this if the current position is not a repetition, because for repeated
+            // positions the WDL probe may not give the correct result.
+            probeResult = tb_probe_root_wdl(
+                    getSyzygyOccupancy(gameState, Side::White),
+                    getSyzygyOccupancy(gameState, Side::Black),
+                    getSyzygyPieceBb(gameState, Piece::King),
+                    getSyzygyPieceBb(gameState, Piece::Queen),
+                    getSyzygyPieceBb(gameState, Piece::Rook),
+                    getSyzygyPieceBb(gameState, Piece::Bishop),
+                    getSyzygyPieceBb(gameState, Piece::Knight),
+                    getSyzygyPieceBb(gameState, Piece::Pawn),
+                    gameState.getPlySinceCaptureOrPawn(),
+                    getSyzygyEnPassantTarget(gameState),
+                    getSyzygySide(gameState),
+                    /*useRule50 = */ true,
+                    &tbRootMoves);
+        }
+
+        if (probeResult == 0 || tbRootMoves.size == 0) {
+            return {};
+        }
     }
+
+    MY_ASSERT(probeResult != 0);
+    MY_ASSERT(tbRootMoves.size != 0);
 
     std::int32_t bestTbRank = tbRootMoves.moves[0].tbRank;
     for (unsigned i = 1; i < tbRootMoves.size; ++i) {

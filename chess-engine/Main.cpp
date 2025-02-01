@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "syzygy-wdl-d3");
+            UciFrontEnd uciFrontEnd(engine, "syzygy-root-wdl-fallback");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
