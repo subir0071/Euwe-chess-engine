@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "syzygy-root-wdl-fallback");
+            UciFrontEnd uciFrontEnd(engine, "qsearch-tt-egtb");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

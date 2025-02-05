@@ -570,7 +570,7 @@ EvalT MoveSearcher::Impl::search(
     // Probe the transposition table and use the stored score and/or move if we get a hit.
     auto ttHit = tTable_.probe(gameState.getBoardHash());
 
-    if (rootInTb_ && ttHit->payload.scoreType == ScoreType::EGTB) {
+    if (rootInTb_ && ttHit.has_value() && ttHit->payload.scoreType == ScoreType::EGTB) {
         // When the root is already in the endgame tablebase, we no longer want to use tablebase
         // values in the search.
         tTable_.erase(gameState.getBoardHash());
@@ -582,8 +582,6 @@ EvalT MoveSearcher::Impl::search(
     if (ttHit) {
         const auto& ttInfo = ttHit->payload;
 
-        hashMove = getTTableMove(ttInfo, gameState);
-
         searchStatistics_.tTableHits++;
 
         // If TT hit is an EGTB value we can return it directly.
@@ -593,10 +591,7 @@ EvalT MoveSearcher::Impl::search(
             return ttInfo.score;
         }
 
-        // If the TT hit is from a deeper search, use the stored value to return early or to update
-        // our bounds. However, if we're at the root and there is no hash move, skip this step and
-        // force a further search to get at least one move in the PV.
-        if (ttInfo.depth >= depth && (ply > 0 || hashMove.has_value())) {
+        if (ttInfo.depth >= depth) {
             if (ttInfo.scoreType == ScoreType::Exact) {
                 if (isPvNode) {
                     searchStatistics_.selectiveDepth =
@@ -636,6 +631,8 @@ EvalT MoveSearcher::Impl::search(
         } else if (ttInfo.scoreType == UpperBound) {
             eval = min(eval, ttInfo.score);
         }
+
+        hashMove = getTTableMove(ttInfo, gameState);
     }
 
     if (syzygyEnabled_ && !rootInTb_ && ply > 0 && depth >= syzygyMinProbeDepth_
@@ -865,7 +862,15 @@ EvalT MoveSearcher::Impl::quiesce(
     std::optional<Move> hashMove = std::nullopt;
 
     // Probe the transposition table and use the stored score and/or move if we get a hit.
-    const auto ttHit = tTable_.probe(gameState.getBoardHash());
+    auto ttHit = tTable_.probe(gameState.getBoardHash());
+
+    if (rootInTb_ && ttHit.has_value() && ttHit->payload.scoreType == ScoreType::EGTB) {
+        // When the root is already in the endgame tablebase, we no longer want to use tablebase
+        // values in the search.
+        tTable_.erase(gameState.getBoardHash());
+        ttHit = std::nullopt;
+    }
+
     if (ttHit) {
         const auto& ttInfo = ttHit->payload;
 
@@ -873,7 +878,7 @@ EvalT MoveSearcher::Impl::quiesce(
 
         // No need to check depth: in qsearch, depth == 0.
 
-        if (ttInfo.scoreType == ScoreType::Exact) {
+        if (ttInfo.scoreType == ScoreType::Exact || ttInfo.scoreType == ScoreType::EGTB) {
             // Exact value
             return ttInfo.score;
         } else if (ttInfo.scoreType == ScoreType::LowerBound) {

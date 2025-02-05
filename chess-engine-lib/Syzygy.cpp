@@ -75,25 +75,22 @@ std::vector<Move> getSyzygyRootMoves(const GameState& gameState) {
             &tbRootMoves);
 
     if (probeResult == 0 || tbRootMoves.size == 0) {
-        if (!gameState.isRepetition(2)) {
-            // Use WDL probe as a fallback.
-            // Only do this if the current position is not a repetition, because for repeated
-            // positions the WDL probe may not give the correct result.
-            probeResult = tb_probe_root_wdl(
-                    getSyzygyOccupancy(gameState, Side::White),
-                    getSyzygyOccupancy(gameState, Side::Black),
-                    getSyzygyPieceBb(gameState, Piece::King),
-                    getSyzygyPieceBb(gameState, Piece::Queen),
-                    getSyzygyPieceBb(gameState, Piece::Rook),
-                    getSyzygyPieceBb(gameState, Piece::Bishop),
-                    getSyzygyPieceBb(gameState, Piece::Knight),
-                    getSyzygyPieceBb(gameState, Piece::Pawn),
-                    gameState.getPlySinceCaptureOrPawn(),
-                    getSyzygyEnPassantTarget(gameState),
-                    getSyzygySide(gameState),
-                    /*useRule50 = */ true,
-                    &tbRootMoves);
-        }
+        // Use WDL probe as a fallback.
+        // TODO: do we then need to use WDL tables in search?
+        probeResult = tb_probe_root_wdl(
+                getSyzygyOccupancy(gameState, Side::White),
+                getSyzygyOccupancy(gameState, Side::Black),
+                getSyzygyPieceBb(gameState, Piece::King),
+                getSyzygyPieceBb(gameState, Piece::Queen),
+                getSyzygyPieceBb(gameState, Piece::Rook),
+                getSyzygyPieceBb(gameState, Piece::Bishop),
+                getSyzygyPieceBb(gameState, Piece::Knight),
+                getSyzygyPieceBb(gameState, Piece::Pawn),
+                gameState.getPlySinceCaptureOrPawn(),
+                getSyzygyEnPassantTarget(gameState),
+                getSyzygySide(gameState),
+                /*useRule50 = */ true,
+                &tbRootMoves);
 
         if (probeResult == 0 || tbRootMoves.size == 0) {
             return {};
