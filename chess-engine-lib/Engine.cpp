@@ -143,8 +143,17 @@ SearchInfo Engine::Impl::findMove(
     std::optional<EvalT> evalGuess = std::nullopt;
     SearchInfo searchInfo;
 
-    int depth;
-    for (depth = 1; depth <= maxDepth; ++depth) {
+    int depth = 1;
+
+    const auto rootNodeInfo = moveSearcher_.getRootNodeInfo(gameState);
+    if (rootNodeInfo) {
+        depth     = rootNodeInfo->depth;
+        evalGuess = rootNodeInfo->eval;
+
+        maxDepth = max(maxDepth, depth);
+    }
+
+    for (; depth <= maxDepth; ++depth) {
         const auto searchResult =
                 moveSearcher_.searchForBestMove(copyState, depth, moveStack_, evalGuess);
 

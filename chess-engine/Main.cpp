@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "later-nmp");
+            UciFrontEnd uciFrontEnd(engine, "always-store-pv-node");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

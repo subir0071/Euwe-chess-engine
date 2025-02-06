@@ -16,6 +16,11 @@ struct RootSearchResult {
     bool wasInterrupted = false;
 };
 
+struct RootNodeInfo {
+    EvalT eval;
+    int depth;
+};
+
 class MoveSearcher {
   public:
     static constexpr int kMaxDepth = 100;
@@ -53,6 +58,8 @@ class MoveSearcher {
     [[nodiscard]] int getDefaultTTableSizeInMb() const;
 
     void setTTableSize(int requestedSizeInMb);
+
+    [[nodiscard]] std::optional<RootNodeInfo> getRootNodeInfo(const GameState& gameState) const;
 
   private:
     class Impl;

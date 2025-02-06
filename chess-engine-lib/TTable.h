@@ -136,7 +136,7 @@ void TTable<PayloadT>::store(const TTEntry<PayloadT>& entryToStore, FuncT&& isMo
     }
     if (valuableEntry.hash == entryToStore.hash) {
         // Same position, update if more valuable
-        if (isMoreValuable(entryToStore.payload, valuableEntry.payload)) {
+        if (isMoreValuable(entryToStore, valuableEntry)) {
             valuableEntry = entryToStore;
         }
         // We either stored the entry or found that we already have more valuable information for
@@ -144,7 +144,7 @@ void TTable<PayloadT>::store(const TTEntry<PayloadT>& entryToStore, FuncT&& isMo
         return;
     }
     // Otherwise, we have an index collision.
-    if (isMoreValuable(entryToStore.payload, valuableEntry.payload)) {
+    if (isMoreValuable(entryToStore, valuableEntry)) {
         // New position is more valuable. Move the old valuable entry to the recent entry slot and
         // store the new entry in the valuable entry slot.
         if (recentEntry.hash == 0) {

@@ -46,6 +46,8 @@ class MoveSearcher::Impl {
 
     void setTTableSize(int requestedSizeInMb);
 
+    [[nodiscard]] std::optional<RootNodeInfo> getRootNodeInfo(const GameState& gameState) const;
+
   private:
     // == Types ==
 
@@ -66,7 +68,8 @@ class MoveSearcher::Impl {
             bool stoppedEarly,
             Move bestMove,
             int depth,
-            HashT hash);
+            HashT hash,
+            bool isPvNode);
 
     void storeEgtbValueInTTable(const EvalT value, const int depth, const HashT hash);
 
@@ -289,7 +292,10 @@ FORCE_INLINE std::optional<Move> getTTableMove(
 }
 
 [[nodiscard]] FORCE_INLINE bool isTTEntryMoreValuable(
-        const SearchTTPayload& newPayload, const SearchTTPayload& oldPayload) {
+        const SearchTTEntry& newEntry, const SearchTTEntry& oldEntry) {
+    const auto& newPayload = newEntry.payload;
+    const auto& oldPayload = oldEntry.payload;
+
     const int tickDelta        = computeWrappingTickDelta(newPayload.tick, oldPayload.tick);
     const int compensatedDepth = (int)newPayload.depth + tickDelta;
 
@@ -366,7 +372,8 @@ FORCE_INLINE void MoveSearcher::Impl::updateTTable(
         const bool stoppedEarly,
         const Move bestMove,
         const int depth,
-        const HashT hash) {
+        const HashT hash,
+        const bool isPvNode) {
     ScoreType scoreType;
     if (stoppedEarly) {
         if (bestScore > alphaOrig) {
@@ -405,7 +412,21 @@ FORCE_INLINE void MoveSearcher::Impl::updateTTable(
                     .moveFlags = bestMove.flags,
             }};
 
-    tTable_.store(entry, isTTEntryMoreValuable);
+    if (isPvNode) {
+        // In a PV node, ensure that the new info is always stored.
+        tTable_.store(entry, [](const SearchTTEntry& newEntry, const SearchTTEntry& oldEntry) {
+            if (newEntry.hash == oldEntry.hash) {
+                // If we already have info for this position, override it.
+                return true;
+            }
+
+            // For index collisions use the default policy. The new entry will be stored in the
+            // 'recent' slot if less valuable than the existing info.
+            return isTTEntryMoreValuable(newEntry, oldEntry);
+        });
+    } else {
+        tTable_.store(entry, isTTEntryMoreValuable);
+    }
 }
 
 FORCE_INLINE void MoveSearcher::Impl::storeEgtbValueInTTable(
@@ -690,7 +711,8 @@ EvalT MoveSearcher::Impl::search(
                     wasInterrupted_,
                     bestMove,
                     depth,
-                    gameState.getBoardHash());
+                    gameState.getBoardHash(),
+                    isPvNode);
 
             // Score was obtained from a subcall that failed high, so it was a lower bound for
             // that position. It is also a lower bound for the overall position because we're
@@ -770,7 +792,8 @@ EvalT MoveSearcher::Impl::search(
                 wasInterrupted_,
                 bestMove,
                 depth,
-                gameState.getBoardHash());
+                gameState.getBoardHash(),
+                isPvNode);
     }
 
     // If bestScore <= alphaOrig, then all subcalls returned upper bounds and bestScore is the
@@ -970,7 +993,8 @@ EvalT MoveSearcher::Impl::quiesce(
                         false,
                         bestMove,
                         /*depth =*/0,
-                        gameState.getBoardHash());
+                        gameState.getBoardHash(),
+                        isPvNode);
 
                 return score;
             }
@@ -1081,7 +1105,8 @@ EvalT MoveSearcher::Impl::quiesce(
                 wasInterrupted_,
                 bestMove,
                 /*depth =*/0,
-                gameState.getBoardHash());
+                gameState.getBoardHash(),
+                isPvNode);
     }
 
     return bestScore;
@@ -1429,6 +1454,25 @@ void MoveSearcher::Impl::setTTableSize(const int requestedSizeInMb) {
     }
 }
 
+std::optional<RootNodeInfo> MoveSearcher::Impl::getRootNodeInfo(const GameState& gameState) const {
+    const HashT hash = gameState.getBoardHash();
+    const auto ttHit = tTable_.probe(hash);
+    if (!ttHit) {
+        return std::nullopt;
+    }
+    const auto ttInfo = ttHit->payload;
+    if (ttInfo.scoreType != ScoreType::Exact) {
+        return std::nullopt;
+    }
+
+    MY_ASSERT_DEBUG(getTTableMove(ttInfo, gameState).has_value());
+
+    return RootNodeInfo{
+            .eval  = ttInfo.score,
+            .depth = ttInfo.depth,
+    };
+}
+
 // Implementation of interface: forward to implementation
 
 MoveSearcher::MoveSearcher(const TimeManager& timeManager, const Evaluator& evaluator)
@@ -1481,4 +1525,8 @@ int MoveSearcher::getDefaultTTableSizeInMb() const {
 
 void MoveSearcher::setTTableSize(const int requestedSizeInMb) {
     impl_->setTTableSize(requestedSizeInMb);
+}
+
+std::optional<RootNodeInfo> MoveSearcher::getRootNodeInfo(const GameState& gameState) const {
+    return impl_->getRootNodeInfo(gameState);
 }
