@@ -533,40 +533,6 @@ EvalT MoveSearcher::Impl::search(
         }
     }
 
-    if (nullMovePruningAllowed(gameState, isPvNode, beta, isInCheck, depth, ply, lastNullMovePly)) {
-        const int nullMoveReduction   = max(3, depth / 2);
-        const int nullMoveSearchDepth = max(1, depth - nullMoveReduction - 1);
-
-        const auto unmakeInfo = gameState.makeNullMove();
-
-        EvalT nullMoveScore =
-                -search(gameState,
-                        nullMoveSearchDepth,
-                        ply + 1,
-                        -beta,
-                        -beta + 1,
-                        /*lastMove =*/{},
-                        /*lastNullMovePly =*/ply,
-                        stack);
-
-        gameState.unmakeNullMove(unmakeInfo);
-
-        updateMateDistance(nullMoveScore);
-
-        if (wasInterrupted_) {
-            return -kInfiniteEval;
-        }
-
-        if (nullMoveScore >= beta) {
-            // TODO: update ttable? We don't have a best move to store, but we can store a lower
-            // bound on the score.
-
-            // Null move failed high, don't bother searching other moves.
-            // Return a conservative lower bound (fail-hard).
-            return beta;
-        }
-    }
-
     // Probe the transposition table and use the stored score and/or move if we get a hit.
     auto ttHit = tTable_.probe(gameState.getBoardHash());
 
@@ -648,6 +614,40 @@ EvalT MoveSearcher::Impl::search(
             storeEgtbValueInTTable(tbScore, depth, gameState.getBoardHash());
 
             return tbScore;
+        }
+    }
+
+    if (nullMovePruningAllowed(gameState, isPvNode, beta, isInCheck, depth, ply, lastNullMovePly)) {
+        const int nullMoveReduction   = max(3, depth / 2);
+        const int nullMoveSearchDepth = max(1, depth - nullMoveReduction - 1);
+
+        const auto unmakeInfo = gameState.makeNullMove();
+
+        EvalT nullMoveScore =
+                -search(gameState,
+                        nullMoveSearchDepth,
+                        ply + 1,
+                        -beta,
+                        -beta + 1,
+                        /*lastMove =*/{},
+                        /*lastNullMovePly =*/ply,
+                        stack);
+
+        gameState.unmakeNullMove(unmakeInfo);
+
+        updateMateDistance(nullMoveScore);
+
+        if (wasInterrupted_) {
+            return -kInfiniteEval;
+        }
+
+        if (nullMoveScore >= beta) {
+            // TODO: update ttable? We don't have a best move to store, but we can store a lower
+            // bound on the score.
+
+            // Null move failed high, don't bother searching other moves.
+            // Return a conservative lower bound (fail-hard).
+            return beta;
         }
     }
 
@@ -1108,21 +1108,7 @@ FORCE_INLINE MoveSearcher::Impl::SearchMoveOutcome MoveSearcher::Impl::searchMov
     const int reducedDepth = max(depth - reduction - 1, 0);
     const int fullDepth    = depth - 1;
 
-    const bool isPvNode              = beta - alpha > 1;
-    const bool likelyNullMoveAllowed = nullMovePruningAllowed(
-            gameState,
-            isPvNode,
-            /*beta*/ -alpha,
-            /*isInCheck =*/false,
-            reducedDepth,
-            ply + 1,
-            lastNullMovePly);
-
-    HashT hashToPrefetch = gameState.getBoardHash();
-    if (likelyNullMoveAllowed) {
-        updateHashForSideToMove(hashToPrefetch);
-    }
-    tTable_.prefetch(hashToPrefetch);
+    tTable_.prefetch(gameState.getBoardHash());
     evaluator_.prefetch(gameState);
 
     EvalT score;

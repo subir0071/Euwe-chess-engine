@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "qsearch-tt-egtb");
+            UciFrontEnd uciFrontEnd(engine, "later-nmp");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
