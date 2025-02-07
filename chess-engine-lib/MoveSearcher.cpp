@@ -71,7 +71,9 @@ class MoveSearcher::Impl {
             HashT hash,
             bool isPvNode);
 
-    void storeEgtbValueInTTable(const EvalT value, const int depth, const HashT hash);
+    void storeEgtbValueInTTable(const EvalT value, int depth, HashT hash);
+
+    void storeNullMoveScoreInTTable(const EvalT value, int depth, HashT hash);
 
     // Extract the principal variation from the transposition table.
     [[nodiscard]] StackVector<Move> extractPv(
@@ -446,6 +448,35 @@ FORCE_INLINE void MoveSearcher::Impl::storeEgtbValueInTTable(
     tTable_.store(entry, isTTEntryMoreValuable);
 }
 
+FORCE_INLINE void MoveSearcher::Impl::storeNullMoveScoreInTTable(
+        const EvalT value, const int depth, const HashT hash) {
+    BoardPosition moveFrom = (BoardPosition)0;
+    BoardPosition moveTo   = (BoardPosition)0;
+    MoveFlags moveFlags    = MoveFlags::None;
+
+    // Retain the existing hash move, if it exists.
+    const auto ttHit = tTable_.probe(hash);
+    if (ttHit) {
+        moveFrom  = ttHit->payload.moveFrom;
+        moveTo    = ttHit->payload.moveTo;
+        moveFlags = ttHit->payload.moveFlags;
+    }
+
+    const SearchTTable::EntryT entry = {
+            .hash    = hash,
+            .payload = {
+                    .score     = value,
+                    .depth     = (std::uint8_t)depth,
+                    .tick      = tTableTick_,
+                    .scoreType = ScoreType::LowerBound,
+                    .moveFrom  = moveFrom,
+                    .moveTo    = moveTo,
+                    .moveFlags = moveFlags,
+            }};
+
+    tTable_.store(entry, isTTEntryMoreValuable);
+}
+
 StackVector<Move> MoveSearcher::Impl::extractPv(
         GameState gameState, StackOfVectors<Move>& stack, const int depth) {
     const int maxPvLength = max(depth, searchStatistics_.selectiveDepth);
@@ -586,26 +617,11 @@ EvalT MoveSearcher::Impl::search(
                 }
                 // Exact value
                 return ttInfo.score;
-            } else if (ttInfo.scoreType == ScoreType::LowerBound) {
-                // Can safely raise the lower bound for our search window, because the true value
-                // is guaranteed to be above this bound.
-                alpha = max(alpha, ttInfo.score);
-            } else if (ttInfo.scoreType == ScoreType::UpperBound) {
-                // Can safely lower the upper bound for our search window, because the true value
-                // is guaranteed to be below this bound.
-                beta = min(beta, ttInfo.score);
-            }
-            // Else: score type not set (result from interrupted search).
-
-            // Check if we can return based on tighter bounds from the transposition table.
-            if (alpha >= beta) {
-                // Based on information from the ttable, we now know that the true value is outside
-                // of the feasibility window.
-                // If alpha was raised by the tt entry this is a lower bound and we want to return
-                // that raised alpha (fail-soft: that's the tightest lower bound we have).
-                // If beta was lowered by the tt entry this is an upper bound and we want to return
-                // that lowered beta (fail-soft: that's the tightest upper bound we have).
-                // So either way we return the tt entry score.
+            } else if (ttInfo.scoreType == ScoreType::LowerBound && ttInfo.score >= beta) {
+                // Lower bound
+                return ttInfo.score;
+            } else if (ttInfo.scoreType == ScoreType::UpperBound && ttInfo.score < alpha) {
+                // Upper bound
                 return ttInfo.score;
             }
         }
@@ -663,8 +679,7 @@ EvalT MoveSearcher::Impl::search(
         }
 
         if (nullMoveScore >= beta) {
-            // TODO: update ttable? We don't have a best move to store, but we can store a lower
-            // bound on the score.
+            storeNullMoveScoreInTTable(beta, depth, gameState.getBoardHash());
 
             // Null move failed high, don't bother searching other moves.
             // Return a conservative lower bound (fail-hard).
