@@ -520,16 +520,15 @@ EvalT MoveSearcher::Impl::search(
         Move lastMove,
         const int lastNullMovePly,
         StackOfVectors<Move>& stack) {
+    if (depth == 0) {
+        return quiesce(gameState, alpha, beta, ply, stack);
+    }
     const bool isPvNode = beta - alpha > 1;
 
     ++searchStatistics_.normalNodesSearched;
 
     if (isPvNode) {
         searchStatistics_.selectiveDepth = max(searchStatistics_.selectiveDepth, ply);
-    }
-
-    if (depth == 0) {
-        return quiesce(gameState, alpha, beta, ply, stack);
     }
 
     // alphaOrig determines whether the value returned is an upper bound

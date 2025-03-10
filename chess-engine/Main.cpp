@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "null-move-score-in-ttable");
+            UciFrontEnd uciFrontEnd(engine, "fix-node-count");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
