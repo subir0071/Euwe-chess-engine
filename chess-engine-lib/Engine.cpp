@@ -3,7 +3,7 @@
 #include "MoveSearcher.h"
 #include "Syzygy.h"
 
-#include <filesystem>
+#include <algorithm>
 
 class Engine::Impl {
   public:
@@ -27,7 +27,7 @@ class Engine::Impl {
 
     [[nodiscard]] EvalT evaluate(const GameState& gameState) const;
 
-    void initializeSyzygy(const std::filesystem::path& syzygyDir);
+    void initializeSyzygy(std::string_view syzygyDir);
 
   private:
     StackOfVectors<Move> moveStack_;
@@ -61,10 +61,8 @@ void Engine::Impl::setFrontEnd(IFrontEnd* frontEnd) {
     timeManager_.setFrontEnd(frontEnd);
     moveSearcher_.setFrontEnd(frontEnd);
 
-    frontEnd_->addOption(
-            FrontEndOption::createString("SyzygyPath", "", [this](const std::string_view v) {
-                initializeSyzygy(std::filesystem::path(v));
-            }));
+    frontEnd_->addOption(FrontEndOption::createString(
+            "SyzygyPath", "", [this](const std::string_view v) { initializeSyzygy(v); }));
 }
 
 void Engine::Impl::newGame() {
@@ -214,14 +212,24 @@ EvalT Engine::Impl::evaluate(const GameState& gameState) const {
     return evaluator_.evaluate(gameState);
 }
 
-void Engine::Impl::initializeSyzygy(const std::filesystem::path& syzygyDir) {
+void Engine::Impl::initializeSyzygy(std::string_view syzygyDir) {
+    if (!syzygyPathIsValid(syzygyDir)) {
+        throw std::invalid_argument(
+                "invalid syzygy path. Must be a ;-separated list of directories.");
+    }
+
     if (hasSyzygy_) {
         tearDownSyzygy();
         hasSyzygy_ = false;
     }
 
     if (!syzygyDir.empty()) {
-        initSyzygy(syzygyDir);
+        const bool success = initSyzygy(std::string(syzygyDir));
+
+        if (!success) {
+            throw std::invalid_argument("Failed to initialize Syzygy tablebases.");
+        }
+
         hasSyzygy_ = true;
     }
 

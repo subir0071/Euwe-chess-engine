@@ -1,15 +1,17 @@
 #pragma once
 
-#include <filesystem>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "EvalT.h"
 #include "GameState.h"
 #include "Move.h"
 
-void initSyzygy(const std::filesystem::path& syzygyDir);
+[[nodiscard]] bool initSyzygy(const std::string& syzygyDirs);
 void tearDownSyzygy();
+
+[[nodiscard]] bool syzygyPathIsValid(std::string_view syzygyDirs);
 
 [[nodiscard]] bool canProbeSyzgyRoot(const GameState& gameState);
 

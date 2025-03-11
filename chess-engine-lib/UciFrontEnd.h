@@ -40,6 +40,10 @@ class UciFrontEnd final : public IFrontEnd {
 
     void reportDiscardedPv(std::string_view reason) const override;
 
+    void reportError(std::string_view message) const override;
+
+    void reportString(std::string_view message) const override;
+
     void reportDebugString(std::string_view message) const override;
 
     void addOption(FrontEndOption option) override;

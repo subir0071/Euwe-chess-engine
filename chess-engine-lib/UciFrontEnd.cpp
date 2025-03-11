@@ -77,6 +77,10 @@ class UciFrontEnd::Impl final : public IFrontEnd {
 
     void reportDiscardedPv(std::string_view reason) const override;
 
+    void reportError(std::string_view message) const override;
+
+    void reportString(std::string_view message) const override;
+
     void reportDebugString(std::string_view message) const override;
 
     void addOption(FrontEndOption option) override;
@@ -102,6 +106,9 @@ class UciFrontEnd::Impl final : public IFrontEnd {
     void writeOptions() const;
 
     std::optional<OptionStringParseResult> parseOptionLine(std::string_view line) const;
+
+    template <typename... Args>
+    void reportError(std::format_string<Args...> fmt, Args&&... args) const;
 
     template <typename... Args>
     void writeUci(std::format_string<Args...> fmt, Args&&... args) const;
@@ -306,6 +313,14 @@ void UciFrontEnd::Impl::reportDiscardedPv(std::string_view reason) const {
     writeDebug("Discarded PV: {}", reason);
 }
 
+void UciFrontEnd::Impl::reportError(std::string_view message) const {
+    writeUci("info string Error: {}", message);
+}
+
+void UciFrontEnd::Impl::reportString(std::string_view message) const {
+    writeUci("info string {}", message);
+}
+
 void UciFrontEnd::Impl::reportDebugString(std::string_view message) const {
     writeDebug("{}", message);
 }
@@ -348,7 +363,7 @@ void UciFrontEnd::Impl::handlePosition(std::stringstream& lineSStream) {
         try {
             gameState_ = GameState::fromFen(fen);
         } catch (const std::exception& e) {
-            writeDebug("Error: Failed to parse FEN: {}", e.what());
+            reportError("Failed to parse FEN: {}", e.what());
             return;
         }
     }
@@ -358,7 +373,7 @@ void UciFrontEnd::Impl::handlePosition(std::stringstream& lineSStream) {
     // While this behavior isn't specified in the original UCI protocol, it seems to be common
     // practice in many UCI GUIs and engines.
     if (lineSStream && token != "moves") {
-        writeDebug("Error: Unrecognized token '{}'. Expected 'moves'.", token);
+        reportError("Unrecognized token '{}'. Expected 'moves'.", token);
         return;
     }
 
@@ -375,7 +390,7 @@ void UciFrontEnd::Impl::handlePosition(std::stringstream& lineSStream) {
 
             (void)gameState_.makeMove(move);
         } catch (const std::exception& e) {
-            writeDebug("Error: Failed to parse or apply move '{}': {}", moveString, e.what());
+            reportError("Failed to parse or apply move '{}': {}", moveString, e.what());
             return;
         }
     }
@@ -470,7 +485,7 @@ void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
 
                     searchMoves.push_back(move);
                 } catch (const std::exception& e) {
-                    writeDebug("Error: Failed to parse search move '{}': {}", token, e.what());
+                    reportError("Failed to parse search move '{}': {}", token, e.what());
                     return;
                 }
             }
@@ -495,7 +510,7 @@ void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
 
         timeManager.configureForTimeControl(*timeLeft, *timeIncrement, *movesToGo, gameState_);
     } else {
-        writeDebug("Error: no time control specified. Defaulting to fixed 1 second search.");
+        reportError("no time control specified. Defaulting to fixed 1 second search.");
         timeManager.configureForFixedTimeSearch(std::chrono::seconds(1));
     }
 
@@ -506,14 +521,14 @@ void UciFrontEnd::Impl::handleGo(std::stringstream& lineSStream) {
             const auto searchInfo = engine_.findMove(gameState_, searchMoves);
 
             if (searchInfo.principalVariation.empty()) {
-                writeDebug("Error: No principal variation found.");
+                reportError("No principal variation found.");
                 std::abort();
             }
 
             writeUci("bestmove {}", searchInfo.principalVariation[0].toUci());
             std::flush(out_);
         } catch (const std::exception& e) {
-            writeDebug("Error: {}", e.what());
+            reportError(e.what());
         }
     });
 }
@@ -531,9 +546,7 @@ void UciFrontEnd::Impl::handleDebug(std::stringstream& lineSStream) {
     } else if (debugSettingString == "off") {
         debugMode_ = false;
     } else {
-        writeDebug(
-
-                "Error: Unknown debug setting '{}'. Expected 'on' or 'off'.", debugSettingString);
+        reportError("Unknown debug setting '{}'. Expected 'on' or 'off'.", debugSettingString);
     }
 
     std::stringstream debugModeSS;
@@ -557,7 +570,7 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
     // UCI option names are case insensitive, so convert to lower case for lookup.
     const auto it = optionsMap_.find(stringToLower(optionParseResult->optionName));
     if (it == optionsMap_.end()) {
-        writeDebug("Error: Unknown option '{}'", optionParseResult->optionName);
+        reportError("Unknown option '{}'", optionParseResult->optionName);
         return;
     }
     FrontEndOption& option = it->second;
@@ -576,15 +589,14 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
             option.trigger();
             writeUci("info string Action option '{}' was triggered.", option.getName());
         } catch (const std::exception& e) {
-            writeDebug(
-                    "Error: Failed to trigger action option '{}': {}", option.getName(), e.what());
+            reportError("Failed to trigger action option '{}': {}", option.getName(), e.what());
         }
         return;
     }
 
     if (!optionParseResult->optionValue.has_value()) {
-        writeDebug(
-                "Error: Option '{}' is not a button. Failed to find value in the following "
+        reportError(
+                "Option '{}' is not a button. Failed to find value in the following "
                 "string: "
                 "'{}'",
                 option.getName(),
@@ -594,8 +606,8 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
 
     if (optionParseResult->optionValue->empty()) {
         if (option.getType() != FrontEndOption::Type::String) {
-            writeDebug(
-                    "Error: Failed to find non-empty option value for non-string option '{}' "
+            reportError(
+                    "Failed to find non-empty option value for non-string option '{}' "
                     "in "
                     "the following string: '{}'",
                     option.getName(),
@@ -607,10 +619,8 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
             option.set("");
             writeUci("info string Option '{}' was set to empty string.", option.getName());
         } catch (const std::exception& e) {
-            writeDebug(
-                    "Error: Failed to set option '{}' to empty string: {}",
-                    option.getName(),
-                    e.what());
+            reportError(
+                    "Failed to set option '{}' to empty string: {}", option.getName(), e.what());
         }
         return;
     }
@@ -622,8 +632,8 @@ void UciFrontEnd::Impl::handleSetOption(const std::string& line) {
                 option.getName(),
                 *optionParseResult->optionValue);
     } catch (const std::exception& e) {
-        writeDebug(
-                "Error: Failed to set option '{}' to '{}': {}",
+        reportError(
+                "Failed to set option '{}' to '{}': {}",
                 option.getName(),
                 *optionParseResult->optionValue,
                 e.what());
@@ -714,8 +724,8 @@ std::optional<OptionStringParseResult> UciFrontEnd::Impl ::parseOptionLine(
     const bool foundNameLiteral                   = nameLiteralPosition != std::string_view::npos;
 
     if (!foundNameLiteral) {
-        writeDebug(
-                "Error: Failed to find expected token '{}' in the following string: '{}'",
+        reportError(
+                "Failed to find expected token '{}' in the following string: '{}'",
                 nameLiteral,
                 line);
         return std::nullopt;
@@ -730,7 +740,7 @@ std::optional<OptionStringParseResult> UciFrontEnd::Impl ::parseOptionLine(
     const int nameLength = foundValueLiteral ? (int)valueLiteralPosition - (int)nameStart - 1
                                              : (int)line.size() - (int)nameStart;
     if (nameLength <= 0) {
-        writeDebug("Error: Failed to find option name in the following string: '{}'", line);
+        reportError("Failed to find option name in the following string: '{}'", line);
         return std::nullopt;
     }
 
@@ -739,10 +749,19 @@ std::optional<OptionStringParseResult> UciFrontEnd::Impl ::parseOptionLine(
 
     if (foundValueLiteral) {
         const auto valueStart = valueLiteralPosition + valueLiteral.size() + 1;
-        result.optionValue    = line.substr(valueStart);
+        if (valueStart > line.size()) {
+            result.optionValue = "";
+        } else {
+            result.optionValue = line.substr(valueStart);
+        }
     }
 
     return result;
+}
+
+template <typename... Args>
+void UciFrontEnd::Impl::reportError(const std::format_string<Args...> fmt, Args&&... args) const {
+    reportError(std::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
@@ -815,6 +834,14 @@ void UciFrontEnd::reportAspirationWindowReSearch(
 
 void UciFrontEnd::reportDiscardedPv(std::string_view reason) const {
     impl_->reportDiscardedPv(reason);
+}
+
+void UciFrontEnd::reportError(std::string_view message) const {
+    impl_->reportError(message);
+}
+
+void UciFrontEnd::reportString(std::string_view message) const {
+    impl_->reportString(message);
 }
 
 void UciFrontEnd::reportDebugString(std::string_view message) const {

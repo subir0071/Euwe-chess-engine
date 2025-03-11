@@ -41,6 +41,10 @@ class IFrontEnd {
     // for some reason.
     virtual void reportDiscardedPv(std::string_view reason) const = 0;
 
+    virtual void reportError(std::string_view message) const = 0;
+
+    virtual void reportString(std::string_view message) const = 0;
+
     virtual void reportDebugString(std::string_view message) const = 0;
 
     // Add option that can be configured through the frontend.
