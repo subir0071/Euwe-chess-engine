@@ -44,6 +44,8 @@ class GameState {
         int lastReversiblePositionHashIdx  = 0;
     };
 
+    using DirectCheckBitBoards = std::array<BitBoard, kNumPieceTypes - 1>;
+
     [[nodiscard]] static GameState fromFen(std::string_view fenString);
     [[nodiscard]] static GameState startingPosition();
 
@@ -146,7 +148,7 @@ class GameState {
         return pinBitBoards_[(int)kingSide];
     }
 
-    [[nodiscard]] std::array<BitBoard, kNumPieceTypes - 1> getDirectCheckBitBoards() const;
+    [[nodiscard]] DirectCheckBitBoards getDirectCheckBitBoards() const;
 
   private:
     struct PieceIdentifier {

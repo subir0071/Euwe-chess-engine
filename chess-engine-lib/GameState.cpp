@@ -954,7 +954,7 @@ FORCE_INLINE const BitBoard& GameState::getPinBitBoard(
     return *pinBitBoards_[(int)kingSide];
 }
 
-FORCE_INLINE std::array<BitBoard, kNumPieceTypes - 1> GameState::getDirectCheckBitBoards() const {
+FORCE_INLINE GameState::DirectCheckBitBoards GameState::getDirectCheckBitBoards() const {
     const BitBoard anyPiece               = getAnyOccupancy();
     const Side enemySide                  = nextSide(sideToMove_);
     const BitBoard enemyKingBitBoard      = getPieceBitBoard(enemySide, Piece::King);

@@ -324,6 +324,47 @@ FORCE_INLINE std::optional<Move> getTTableMove(
     return true;
 }
 
+[[nodiscard]] FORCE_INLINE EvalT
+calculateFutilityMargin(const int reducedDepth, const int movesSearched) {
+    static constexpr EvalT futilityMarginPerDepth        = 140;
+    static constexpr EvalT futilityMarginPerMoveSearched = 20;
+    return max(
+            futilityMarginPerDepth * reducedDepth - futilityMarginPerMoveSearched * movesSearched,
+            0);
+}
+
+[[nodiscard]] FORCE_INLINE EvalT getMoveFutilityValue(
+        const EvalT eval,
+        const EvalT alpha,
+        const int reducedDepth,
+        const int movesSearched,
+        const Move& move,
+        const GameState& gameState,
+        const std::optional<BitBoard> enemyPinBitBoard,
+        std::optional<GameState::DirectCheckBitBoards>& directCheckBitBoards) {
+    if (isCaptureOrQueenPromo(move)) {
+        return kMateEval;
+    }
+
+    const EvalT futilityMargin = calculateFutilityMargin(reducedDepth, movesSearched);
+    const EvalT futilityValue  = eval + futilityMargin;
+
+    if (futilityValue > alpha) {
+        // Early exit to avoid check calculations.
+        return futilityValue;
+    }
+
+    if (!directCheckBitBoards) {
+        directCheckBitBoards = gameState.getDirectCheckBitBoards();
+    }
+
+    if (gameState.givesCheck(move, *directCheckBitBoards, enemyPinBitBoard)) {
+        return kMateEval;
+    }
+
+    return futilityValue;
+}
+
 }  // namespace
 
 MoveSearcher::Impl::Impl(const TimeManager& timeManager, const Evaluator& evaluator)
@@ -572,7 +613,7 @@ EvalT MoveSearcher::Impl::search(
     const std::optional<BitBoard> enemyPinBitBoard =
             gameState.getCalculatedPinBitBoard(nextSide(gameState.getSideToMove()));
 
-    std::optional<std::array<BitBoard, kNumPieceTypes - 1>> directCheckBitBoards = std::nullopt;
+    std::optional<GameState::DirectCheckBitBoards> directCheckBitBoards = std::nullopt;
 
     if (reverseFutilityPruningEnabled) {
         static constexpr EvalT futilityMarginPerDepth = 140;
@@ -752,17 +793,18 @@ EvalT MoveSearcher::Impl::search(
                 move, movesSearched, moveOrderer.lastMoveWasLosing(), isPvNode, depth, extension);
 
         // Futility pruning
-        static constexpr EvalT futilityMarginPerDepth        = 140;
-        static constexpr EvalT futilityMarginPerMoveSearched = 20;
-        const EvalT futilityMargin = futilityMarginPerDepth * (depth - reduction)
-                                   - futilityMarginPerMoveSearched * movesSearched;
-        const EvalT futilityValue = eval + max(futilityMargin, (EvalT)0);
-        if (futilityPruningEnabled && futilityValue <= alpha && !isCaptureOrQueenPromo(move)) {
-            if (!directCheckBitBoards) {
-                directCheckBitBoards = gameState.getDirectCheckBitBoards();
-            }
+        if (futilityPruningEnabled) {
+            const EvalT futilityValue = getMoveFutilityValue(
+                    eval,
+                    alpha,
+                    depth - reduction,
+                    movesSearched,
+                    move,
+                    gameState,
+                    enemyPinBitBoard,
+                    directCheckBitBoards);
 
-            if (!gameState.givesCheck(move, *directCheckBitBoards, enemyPinBitBoard)) {
+            if (futilityValue <= alpha) {
                 if (futilityValue > bestScore) {
                     bestScore = futilityValue;
                     bestMove  = move;
