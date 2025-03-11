@@ -38,21 +38,21 @@ namespace {
 
 }  // namespace
 
-bool initSyzygy(const std::string& syzygyDirs) {
-    tb_init(syzygyDirs.c_str());
-
-    return TB_LARGEST != 0;
-}
-
-void tearDownSyzygy() {
-    tb_free();
-}
-
 bool syzygyPathIsValid(std::string_view syzygyDirs) {
     return std::ranges::all_of(syzygyDirs | std::views::split(';'), [](const auto& part) {
         const std::filesystem::path p(part.begin(), part.end());
         return std::filesystem::is_directory(p);
     });
+}
+
+int initSyzygy(const std::string& syzygyDirs) {
+    tb_init(syzygyDirs.c_str());
+
+    return TB_LARGEST;
+}
+
+void tearDownSyzygy() {
+    tb_free();
 }
 
 FORCE_INLINE bool canProbeSyzgyRoot(const GameState& gameState) {

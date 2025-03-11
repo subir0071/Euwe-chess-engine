@@ -8,10 +8,11 @@
 #include "GameState.h"
 #include "Move.h"
 
-[[nodiscard]] bool initSyzygy(const std::string& syzygyDirs);
-void tearDownSyzygy();
-
 [[nodiscard]] bool syzygyPathIsValid(std::string_view syzygyDirs);
+
+[[nodiscard]] int initSyzygy(const std::string& syzygyDirs);
+
+void tearDownSyzygy();
 
 [[nodiscard]] bool canProbeSyzgyRoot(const GameState& gameState);
 

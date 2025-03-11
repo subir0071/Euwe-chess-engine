@@ -224,11 +224,14 @@ void Engine::Impl::initializeSyzygy(std::string_view syzygyDir) {
     }
 
     if (!syzygyDir.empty()) {
-        const bool success = initSyzygy(std::string(syzygyDir));
+        const int tbPieces = initSyzygy(std::string(syzygyDir));
 
-        if (!success) {
+        if (tbPieces == 0) {
             throw std::invalid_argument("Failed to initialize Syzygy tablebases.");
         }
+
+        frontEnd_->reportString(
+                "Syzygy tablebases initialized with " + std::to_string(tbPieces) + " pieces.");
 
         hasSyzygy_ = true;
     }
