@@ -341,7 +341,7 @@ FORCE_INLINE std::optional<Move> getTTableMove(
 
 [[nodiscard]] FORCE_INLINE EvalT
 calculateFutilityMargin(const int reducedDepth, const int movesSearched, const bool isTactical) {
-    static constexpr EvalT kFutilityMarginForLosingTactical = 50;
+    static constexpr EvalT kFutilityMarginForLosingTactical = 100;
     static constexpr EvalT kFutilityMarginPerDepth          = 140;
     static constexpr EvalT kFutilityMarginPerMoveSearched   = 20;
 
@@ -581,7 +581,26 @@ FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
     }
 
     const EvalT futilityMargin = calculateFutilityMargin(reducedDepth, movesSearched, isTactical);
-    const EvalT futilityValue  = eval + futilityMargin;
+
+    EvalT futilityValue;
+    if (isTactical) {
+        const int seeThreshold = alpha - (eval + futilityMargin);
+
+        if (seeThreshold >= 0) {
+            // We know the move is losing, so no need to check whether SEE >= 0.
+            // Note that in this case, alpha >= eval + futilityMargin.
+            // So: futilityValue <= alpha.
+            futilityValue = eval + futilityMargin;
+        } else {
+            // staticExchangeEvaluationBound checks if SEE >= seeThreshold, but we want to know if
+            // SEE > seeThreshold. This is equivalent to checking if SEE >= seeThreshold + 1.
+            const int seeBound = staticExchangeEvaluationBound(gameState, move, seeThreshold + 1);
+
+            futilityValue = eval + futilityMargin + seeBound;
+        }
+    } else {
+        futilityValue = eval + futilityMargin;
+    }
 
     if (futilityValue > alpha) {
         // Early exit to avoid check calculations.
