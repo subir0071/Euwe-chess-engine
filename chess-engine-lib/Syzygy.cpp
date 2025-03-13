@@ -162,13 +162,23 @@ std::vector<Move> getSyzygyRootMoves(const GameState& gameState) {
 }
 
 FORCE_INLINE bool canProbeSyzgyWdl(const GameState& gameState) {
-    if (gameState.getPlySinceCaptureOrPawn() != 0) {
+    return canProbeSyzgyWdl(
+            gameState.getPlySinceCaptureOrPawn(),
+            gameState.getCastlingRights(),
+            gameState.getNumPieces());
+}
+
+FORCE_INLINE bool canProbeSyzgyWdl(
+        const int plySinceCaptureOrPawn,
+        const GameState::CastlingRights castlingRights,
+        const int numPieces) {
+    if (plySinceCaptureOrPawn != 0) {
         return false;
     }
-    if (gameState.getCastlingRights() != GameState::CastlingRights::None) {
+    if (castlingRights != GameState::CastlingRights::None) {
         return false;
     }
-    if (gameState.getNumPieces() > TB_LARGEST) {
+    if (numPieces > TB_LARGEST) {
         return false;
     }
 

@@ -20,4 +20,7 @@ void tearDownSyzygy();
 
 [[nodiscard]] bool canProbeSyzgyWdl(const GameState& gameState);
 
+[[nodiscard]] bool canProbeSyzgyWdl(
+        int plySinceCaptureOrPawn, GameState::CastlingRights castlingRights, int numPieces);
+
 [[nodiscard]] std::optional<EvalT> probeSyzygyWdl(const GameState& gameState);

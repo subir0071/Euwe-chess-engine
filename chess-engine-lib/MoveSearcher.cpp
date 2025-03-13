@@ -81,6 +81,21 @@ class MoveSearcher::Impl {
 
     [[nodiscard]] bool shouldStopSearch() const;
 
+    [[nodiscard]] bool shouldProbeSyzygy(const GameState& gameState, int ply, int depth) const;
+
+    [[nodiscard]] bool captureWillProbeSyzygy(const GameState& gameState, int depth) const;
+
+    [[nodiscard]] EvalT getMoveFutilityValue(
+            const EvalT eval,
+            const EvalT alpha,
+            const int reducedDepth,
+            const int movesSearched,
+            const Move& move,
+            const bool moveIsLosing,
+            const GameState& gameState,
+            const std::optional<BitBoard> enemyPinBitBoard,
+            std::optional<GameState::DirectCheckBitBoards>& directCheckBitBoards);
+
     // == Search functions ==
 
     // Main search function: alpha-beta search with negamax and transposition table.
@@ -325,44 +340,18 @@ FORCE_INLINE std::optional<Move> getTTableMove(
 }
 
 [[nodiscard]] FORCE_INLINE EvalT
-calculateFutilityMargin(const int reducedDepth, const int movesSearched) {
-    static constexpr EvalT futilityMarginPerDepth        = 140;
-    static constexpr EvalT futilityMarginPerMoveSearched = 20;
+calculateFutilityMargin(const int reducedDepth, const int movesSearched, const bool isTactical) {
+    static constexpr EvalT kFutilityMarginForLosingTactical = 50;
+    static constexpr EvalT kFutilityMarginPerDepth          = 140;
+    static constexpr EvalT kFutilityMarginPerMoveSearched   = 20;
+
+    if (isTactical) {
+        return kFutilityMarginPerDepth * reducedDepth + kFutilityMarginForLosingTactical;
+    }
+
     return max(
-            futilityMarginPerDepth * reducedDepth - futilityMarginPerMoveSearched * movesSearched,
+            kFutilityMarginPerDepth * reducedDepth - kFutilityMarginPerMoveSearched * movesSearched,
             0);
-}
-
-[[nodiscard]] FORCE_INLINE EvalT getMoveFutilityValue(
-        const EvalT eval,
-        const EvalT alpha,
-        const int reducedDepth,
-        const int movesSearched,
-        const Move& move,
-        const GameState& gameState,
-        const std::optional<BitBoard> enemyPinBitBoard,
-        std::optional<GameState::DirectCheckBitBoards>& directCheckBitBoards) {
-    if (isCaptureOrQueenPromo(move)) {
-        return kMateEval;
-    }
-
-    const EvalT futilityMargin = calculateFutilityMargin(reducedDepth, movesSearched);
-    const EvalT futilityValue  = eval + futilityMargin;
-
-    if (futilityValue > alpha) {
-        // Early exit to avoid check calculations.
-        return futilityValue;
-    }
-
-    if (!directCheckBitBoards) {
-        directCheckBitBoards = gameState.getDirectCheckBitBoards();
-    }
-
-    if (gameState.givesCheck(move, *directCheckBitBoards, enemyPinBitBoard)) {
-        return kMateEval;
-    }
-
-    return futilityValue;
 }
 
 }  // namespace
@@ -544,12 +533,71 @@ StackVector<Move> MoveSearcher::Impl::extractPv(
     return pv;
 }
 
-bool MoveSearcher::Impl::shouldStopSearch() const {
+FORCE_INLINE bool MoveSearcher::Impl::shouldStopSearch() const {
     const std::uint64_t numNodes =
             searchStatistics_.normalNodesSearched + searchStatistics_.qNodesSearched;
     wasInterrupted_ = wasInterrupted_ || stopSearch_.exchange(false)
                    || timeManager_.shouldInterruptSearch(numNodes);
     return wasInterrupted_;
+}
+
+FORCE_INLINE bool MoveSearcher::Impl::shouldProbeSyzygy(
+        const GameState& gameState, const int ply, const int depth) const {
+    return syzygyEnabled_ && !rootInTb_ && ply > 0 && depth >= syzygyMinProbeDepth_
+        && canProbeSyzgyWdl(gameState);
+}
+
+FORCE_INLINE bool MoveSearcher::Impl::captureWillProbeSyzygy(
+        const GameState& gameState, const int depth) const {
+    // Note: using the current castling rights here is an approximation; the capture may change the
+    // castling rights of the side to move. However, this is a very rare situation.
+
+    return syzygyEnabled_ && !rootInTb_ && depth - 1 >= syzygyMinProbeDepth_ && depth - 1 > 0
+        && canProbeSyzgyWdl(
+                   /*plySinceCaptureOrPawn*/ 0,
+                   gameState.getCastlingRights(),
+                   gameState.getNumPieces() - 1);
+}
+
+FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
+        const EvalT eval,
+        const EvalT alpha,
+        const int reducedDepth,
+        const int movesSearched,
+        const Move& move,
+        const bool moveIsLosing,
+        const GameState& gameState,
+        const std::optional<BitBoard> enemyPinBitBoard,
+        std::optional<GameState::DirectCheckBitBoards>& directCheckBitBoards) {
+    const bool isTactical = isCaptureOrQueenPromo(move);
+
+    if (isTactical && !moveIsLosing) {
+        // Don't futility prune winning tactical moves.
+        return kMateEval;
+    }
+    if (isCapture(move) && captureWillProbeSyzygy(gameState, reducedDepth)) {
+        // We will get a fast and accurate value from syzygy probe, so no point pruning this move.
+        return kMateEval;
+    }
+
+    const EvalT futilityMargin = calculateFutilityMargin(reducedDepth, movesSearched, isTactical);
+    const EvalT futilityValue  = eval + futilityMargin;
+
+    if (futilityValue > alpha) {
+        // Early exit to avoid check calculations.
+        return futilityValue;
+    }
+
+    if (!directCheckBitBoards) {
+        directCheckBitBoards = gameState.getDirectCheckBitBoards();
+    }
+
+    if (gameState.givesCheck(move, *directCheckBitBoards, enemyPinBitBoard)) {
+        // Don't futility prune moves that give check.
+        return kMateEval;
+    }
+
+    return futilityValue;
 }
 
 EvalT MoveSearcher::Impl::search(
@@ -678,8 +726,7 @@ EvalT MoveSearcher::Impl::search(
         hashMove = getTTableMove(ttInfo, gameState);
     }
 
-    if (syzygyEnabled_ && !rootInTb_ && ply > 0 && depth >= syzygyMinProbeDepth_
-        && canProbeSyzgyWdl(gameState)) {
+    if (shouldProbeSyzygy(gameState, ply, depth)) {
         const auto maybeTbScore = probeSyzygyWdl(gameState);
         timeManager_.forceNextCheck();
 
@@ -800,6 +847,7 @@ EvalT MoveSearcher::Impl::search(
                     depth - reduction,
                     movesSearched,
                     move,
+                    moveOrderer.lastMoveWasLosing(),
                     gameState,
                     enemyPinBitBoard,
                     directCheckBitBoards);
