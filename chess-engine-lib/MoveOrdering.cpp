@@ -82,7 +82,9 @@ FORCE_INLINE std::optional<Move> MoveOrderer::getNextBestMove(const GameState& g
                 const Move bestMove = moves_[bestMoveIdx];
 
                 if (isCapture(bestMove.flags)) {
-                    const bool isNonLosing = staticExchangeEvaluationNonLosing(gameState, bestMove);
+                    const bool isNonLosing = staticExchangeEvaluationBound(
+                                                     gameState, bestMove, kCaptureLosingThreshold)
+                                          >= kCaptureLosingThreshold;
 
                     if (!isNonLosing) {
                         // This move is losing based on SEE. Move it to the losing moves list, and find the next

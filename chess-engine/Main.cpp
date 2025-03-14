@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "capture-see-futility-pruning");
+            UciFrontEnd uciFrontEnd(engine, "lower-losing-capture-threshold");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

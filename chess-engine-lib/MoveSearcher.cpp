@@ -586,11 +586,12 @@ FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
     if (isTactical) {
         const int seeThreshold = alpha - (eval + futilityMargin);
 
-        if (seeThreshold >= 0) {
-            // We know the move is losing, so no need to check whether SEE >= 0.
-            // Note that in this case, alpha >= eval + futilityMargin.
+        if (seeThreshold >= MoveOrderer::kCaptureLosingThreshold) {
+            // We know the move is losing, so no need to check whether SEE is above the losing
+            // threshold.
+            // Note that in this case, alpha >= eval + futilityMargin + kCaptureLosingThreshold.
             // So: futilityValue <= alpha.
-            futilityValue = eval + futilityMargin;
+            futilityValue = eval + futilityMargin + MoveOrderer::kCaptureLosingThreshold;
         } else {
             // staticExchangeEvaluationBound checks if SEE >= seeThreshold, but we want to know if
             // SEE > seeThreshold. This is equivalent to checking if SEE >= seeThreshold + 1.

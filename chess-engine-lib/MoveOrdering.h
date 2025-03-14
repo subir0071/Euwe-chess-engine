@@ -45,6 +45,8 @@ class MoveOrderer {
     [[nodiscard]] bool lastMoveWasLosing() const;
     [[nodiscard]] MoveType getLastMoveType() const;
 
+    static constexpr int kCaptureLosingThreshold = -20;
+
   private:
     enum class State {
         Init,
