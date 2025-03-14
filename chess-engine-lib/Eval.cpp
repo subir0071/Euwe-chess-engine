@@ -1436,13 +1436,14 @@ FORCE_INLINE void Evaluator::prefetch(const GameState& gameState) const {
 
 FORCE_INLINE int getStaticPieceValue(const Piece piece) {
     static constexpr std::array kStaticPieceValues = {
-            100,     // Pawn
-            305,     // Knight
-            308,     // Bishop
-            563,     // Rook
-            950,     // Queen
-            20'000,  // King
-            0,       // Invalid (aka none)
+            100,      // Pawn
+            305,      // Knight
+            308,      // Bishop
+            563,      // Rook
+            950,      // Queen
+            20'000,   // King
+            INT_MIN,  // (not a possible value)
+            0,        // Invalid (aka none)
     };
 
     return kStaticPieceValues[(int)piece];

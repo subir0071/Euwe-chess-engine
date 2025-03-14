@@ -19,15 +19,17 @@ std::string getTestName(const ::testing::TestParamInfo<SEETestConfig>& info) {
 
 class SEETests : public ::testing::TestWithParam<SEETestConfig> {};
 
-void testSee(const GameState& gameState, const Move& move, int expectedScore) {
+void testSee(const GameState& gameState, const Move& move, const int expectedScore) {
     EXPECT_EQ(expectedScore, staticExchangeEvaluation(gameState, move));
-    EXPECT_EQ(expectedScore >= 0, staticExchangeEvaluationNonLosing(gameState, move));
 
     for (int threshold = -1000; threshold <= expectedScore; ++threshold) {
         // seeBound should be a lower bound l such that s >= l >= t.
         const int seeBound = staticExchangeEvaluationBound(gameState, move, threshold);
         EXPECT_GE(expectedScore, seeBound);
         EXPECT_GE(seeBound, threshold);
+
+        const bool meetsBound = staticExchangeEvaluationMeetsBound(gameState, move, threshold);
+        EXPECT_EQ(expectedScore >= threshold, meetsBound);
     }
 
     for (int threshold = expectedScore + 1; threshold <= 1000; ++threshold) {
@@ -35,6 +37,9 @@ void testSee(const GameState& gameState, const Move& move, int expectedScore) {
         const int seeBound = staticExchangeEvaluationBound(gameState, move, threshold);
         EXPECT_LE(expectedScore, seeBound);
         EXPECT_LT(seeBound, threshold);
+
+        const bool meetsBound = staticExchangeEvaluationMeetsBound(gameState, move, threshold);
+        EXPECT_EQ(expectedScore >= threshold, meetsBound);
     }
 }
 
@@ -48,6 +53,11 @@ TEST_P(SEETests, TestStaticExchangeEvaluation) {
 
 TEST_P(SEETests, TestStaticExchangeEvaluationWithoutVictim) {
     const SEETestConfig config = GetParam();
+
+    if (config.move.pieceToMove == Piece::Pawn || !isCapture(config.move)) {
+        // Removing the victim to create a normal move only works for non-pawn captures.
+        return;
+    }
 
     GameState gameState = GameState::fromFen(config.fen);
 
@@ -247,15 +257,82 @@ auto testCases = ::testing::Values(
                         getStaticPieceValue(Piece::Pawn) - getStaticPieceValue(Piece::Knight)},
         SEETestConfig{
                 .name = "perftPosition4Continuation",
-                .fen  = "r3k2r/Pppp1ppp/1b3nbN/nPP5/BB2P3/q4N2/Pp1P2PP/R2Q1RK1 b kq - 0 1",
+                .fen  = "r3k2r/Pppp1ppp/1b3nbN/nPP5/BB2P3/q4N2/Pp1P2PP/R2Q1RK1 b kq "
+                        "- 0 1",
                 .move = Move{.pieceToMove = Piece::Bishop, .from = BoardPosition::B6, .to = BoardPosition::C5, .flags = MoveFlags::IsCapture},
                 .expectedScore = getStaticPieceValue(Piece::Pawn)},
         SEETestConfig{
                 .name = "perftPosition4ContinuationLosingQueenCapture",
-                .fen  = "r3k2r/Pppp1ppp/1b3nbN/nPP5/BB2P3/q4N2/Pp1P2PP/R2Q1RK1 b kq - 0 1",
+                .fen  = "r3k2r/Pppp1ppp/1b3nbN/nPP5/BB2P3/q4N2/Pp1P2PP/R2Q1RK1 b kq "
+                        "- 0 1",
                 .move = Move{.pieceToMove = Piece::Queen, .from = BoardPosition::A3, .to = BoardPosition::F3, .flags = MoveFlags::IsCapture},
                 .expectedScore =
-                        getStaticPieceValue(Piece::Knight) - getStaticPieceValue(Piece::Queen)});
+                        getStaticPieceValue(Piece::Knight) - getStaticPieceValue(Piece::Queen)},
+        SEETestConfig{
+                .name = "queenPromo",
+                .fen  = "2K3n1/5P2/8/8/8/8/8/2k5 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Pawn, .from = BoardPosition::F7, .to = BoardPosition::F8, .flags = MoveFlags::None | Piece::Queen},
+                .expectedScore =
+                        getStaticPieceValue(Piece::Queen) - getStaticPieceValue(Piece::Pawn)},
+        SEETestConfig{
+                .name = "queenPromoCaptureKnight",
+                .fen  = "2K3n1/5P2/8/8/8/8/8/2k5 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Pawn, .from = BoardPosition::F7, .to = BoardPosition::G8, .flags = MoveFlags::IsCapture | Piece::Queen},
+                .expectedScore = getStaticPieceValue(Piece::Knight)
+                               + getStaticPieceValue(Piece::Queen)
+                               - getStaticPieceValue(Piece::Pawn)},
+        SEETestConfig{
+                .name = "defendedQueenPromo",
+                .fen  = "2K4r/5P2/8/8/8/8/8/2k5 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Pawn, .from = BoardPosition::F7, .to = BoardPosition::F8, .flags = MoveFlags::None | Piece::Queen},
+                .expectedScore = -getStaticPieceValue(Piece::Pawn)},
+        SEETestConfig{
+                .name = "defendedQueenPromoCaptureKnight",
+                .fen  = "2K3nr/5P2/8/8/8/8/8/2k5 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Pawn, .from = BoardPosition::F7, .to = BoardPosition::G8, .flags = MoveFlags::IsCapture | Piece::Queen},
+                .expectedScore =
+                        getStaticPieceValue(Piece::Knight) - getStaticPieceValue(Piece::Pawn)},
+        SEETestConfig{
+                .name = "doublePromo",
+                .fen  = "4n2r/3P1P2/8/8/8/8/8/2k2K2 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Pawn, .from = BoardPosition::D7, .to = BoardPosition::E8, .flags = MoveFlags::IsCapture | Piece::Queen},
+                .expectedScore = getStaticPieceValue(Piece::Knight)
+                               + getStaticPieceValue(Piece::Queen)
+                               - getStaticPieceValue(Piece::Pawn)},
+        SEETestConfig{
+                .name = "defendedByPromotingPawn",
+                .fen  = "Q3n2r/5P2/8/8/8/8/8/2k2K2 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Queen, .from = BoardPosition::A8, .to = BoardPosition::E8, .flags = MoveFlags::IsCapture},
+                .expectedScore = getStaticPieceValue(Piece::Knight)},
+        // From https://talkchess.com/viewtopic.php?t=77787
+        SEETestConfig{
+                .name = "forumPromotion",
+                .fen  = "2r5/1P4pk/p2p1b1p/5b1n/BB3p2/2R2p2/P1P2P2/4RK2 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Rook, .from = BoardPosition::C3, .to = BoardPosition::C8, .flags = MoveFlags::IsCapture},
+                .expectedScore = getStaticPieceValue(Piece::Rook)},
+        // From https://talkchess.com/viewtopic.php?p=900686#p900686
+        SEETestConfig{
+                .name = "forumPromotion2",
+                .fen  = "2nN3r/2P2ppk/5b1p/2B5/8/7P/3R2PK/8 b - - 0 1",
+                .move = Move{.pieceToMove = Piece::Bishop, .from = BoardPosition::F6, .to = BoardPosition::D8, .flags = MoveFlags::IsCapture},
+                .expectedScore =
+                        getStaticPieceValue(Piece::Knight) - getStaticPieceValue(Piece::Bishop)
+                        + getStaticPieceValue(Piece::Pawn) - getStaticPieceValue(Piece::Rook)},
+        SEETestConfig{
+                .name = "pawnPush",
+                .fen  = "8/7r/8/8/8/5P2/8/2k2K2 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Pawn, .from = BoardPosition::F3, .to = BoardPosition::F4, .flags = MoveFlags::None},
+                .expectedScore = 0},
+        SEETestConfig{
+                .name = "defendedPawnPush",
+                .fen  = "8/8/8/8/7r/5P2/8/2k2K2 w - - 0 1",
+                .move = Move{.pieceToMove = Piece::Pawn, .from = BoardPosition::F3, .to = BoardPosition::F4, .flags = MoveFlags::None},
+                .expectedScore = -getStaticPieceValue(Piece::Pawn)},
+        SEETestConfig{
+                .name = "castle",
+                .fen  = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w KQkq - 0 1",
+                .move = Move{.pieceToMove = Piece::King, .from = BoardPosition::E1, .to = BoardPosition::G1, .flags = MoveFlags::IsCastle},
+                .expectedScore = 0});
 
 INSTANTIATE_TEST_CASE_P(SEETests, SEETests, testCases, getTestName);
 

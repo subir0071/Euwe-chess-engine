@@ -142,17 +142,30 @@ FORCE_INLINE void updateForXRay(
 template <bool ReturnBound, bool ReturnMeets>
 [[nodiscard]] FORCE_INLINE auto staticExchangeEvaluationImpl(
         const GameState& gameState, const Move& move, const int threshold) {
-    // TODO: consider promotions? Pins?
-
     static_assert(!(ReturnBound && ReturnMeets));
+
+    if (isCastle(move)) {
+        if constexpr (ReturnMeets) {
+            return 0 >= threshold;
+        } else {
+            return 0;
+        }
+    }
 
     const BoardPosition targetSquare = move.to;
 
     auto [anyPiece, targetPiece] = getAnyPieceAndTargetPiece(gameState, move);
 
     std::array<int, kNumTotalPieces> gain{};
-    int exchangeIdx     = 0;
-    gain[exchangeIdx++] = getStaticPieceValue(targetPiece);
+    int exchangeIdx   = 0;
+    gain[exchangeIdx] = getStaticPieceValue(targetPiece);
+
+    if (isPromotion(move)) {
+        const Piece promotionPiece = getPromotionPiece(move);
+        gain[exchangeIdx] += getStaticPieceValue(promotionPiece) - getStaticPieceValue(Piece::Pawn);
+    }
+
+    ++exchangeIdx;
 
     if constexpr (ReturnBound) {
         if (gain[0] < threshold) {
@@ -171,7 +184,14 @@ template <bool ReturnBound, bool ReturnMeets>
 
     std::array<int, kNumSides> minimumAttackerIdx = {0, 0};
 
-    targetPiece            = move.pieceToMove;
+    if (isPromotion(move)) {
+        targetPiece = getPromotionPiece(move);
+    } else {
+        targetPiece = move.pieceToMove;
+    }
+    const bool isAPromotionSquare =
+            rankFromPosition(targetSquare) == 0 || rankFromPosition(targetSquare) == kRanks - 1;
+
     BitBoard vacatedSquare = BitBoard::Empty | move.from;
 
     BitBoard controllingPieces =
@@ -184,7 +204,10 @@ template <bool ReturnBound, bool ReturnMeets>
 
         const Side side = (Side)((exchangeIdx + (int)sideToMove) & 1);
 
-        if constexpr (ReturnMeets) {
+        const bool attackerMayBePromoting =
+                isAPromotionSquare && minimumAttackerIdx[(int)side] == 0;
+
+        if (ReturnMeets && !attackerMayBePromoting) {
             if (side == sideToMove) {
                 if (gain[exchangeIdx] < threshold) {
                     // Even if we take the target piece, we're still below the threshold.
@@ -216,32 +239,12 @@ template <bool ReturnBound, bool ReturnMeets>
                 controllingPieces,
                 minimumAttackerIdx);
 
-        auto [attacker, attackerSquare] = getLeastValuableAttacker(
+        const auto [attacker, attackerSquare] = getLeastValuableAttacker(
                 controllingPieces, pieceBitBoards, minimumAttackerIdx[(int)side], side);
 
         if (attacker == Piece::Invalid) {
             // No more attackers left.
             break;
-        }
-
-        if constexpr (ReturnBound) {
-            if (side == sideToMove) {
-                if (gain[exchangeIdx] < threshold) {
-                    // Even after taking the target piece, we're still below the threshold.
-                    // If the exchange gets to this point it will never rise above the threshold again,
-                    // so we don't need to consider what happens after this point.
-                    ++exchangeIdx;  // We do need to consider the last capture to get an accurate bound.
-                    break;
-                }
-            } else {
-                if (-gain[exchangeIdx] >= threshold) {
-                    // Even after taking the target piece, the gain for the opponent is still above the
-                    // threshold. So if the exchange gets to this point it will never drop below the
-                    // threshold again, so we don't need to consider what happens after this point.
-                    ++exchangeIdx;  // We do need to consider the last capture to get an accurate bound.
-                    break;
-                }
-            }
         }
 
         minimumAttackerIdx[(int)side] = (int)attacker;
@@ -250,6 +253,36 @@ template <bool ReturnBound, bool ReturnMeets>
         // Defer updating of controllingPieces and anyPiece.
         targetPiece   = attacker;
         vacatedSquare = attackerSquare;
+
+        if (isAPromotionSquare && attacker == Piece::Pawn) {
+            gain[exchangeIdx] +=
+                    getStaticPieceValue(Piece::Queen) - getStaticPieceValue(Piece::Pawn);
+            targetPiece = Piece::Queen;
+        }
+
+        if (ReturnBound || (ReturnMeets && attackerMayBePromoting)) {
+            if (side == sideToMove) {
+                if (gain[exchangeIdx] < threshold) {
+                    // Even after taking the target piece, we're still below the threshold.
+                    // If the exchange gets to this point it will never rise above the threshold again,
+                    // so we don't need to consider what happens after this point.
+                    if constexpr (!ReturnMeets) {
+                        ++exchangeIdx;  // We do need to consider the last capture to get an accurate bound.
+                    }
+                    break;
+                }
+            } else {
+                if (-gain[exchangeIdx] >= threshold) {
+                    // Even after taking the target piece, the gain for the opponent is still above the
+                    // threshold. So if the exchange gets to this point it will never drop below the
+                    // threshold again, so we don't need to consider what happens after this point.
+                    if constexpr (!ReturnMeets) {
+                        ++exchangeIdx;  // We do need to consider the last capture to get an accurate bound.
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     // After captures 0...i-1, if we stop the exchange the gain from the perspective of the player
@@ -282,7 +315,8 @@ int staticExchangeEvaluationBound(
             gameState, move, threshold);
 }
 
-bool staticExchangeEvaluationNonLosing(const GameState& gameState, const Move& move) {
+bool staticExchangeEvaluationMeetsBound(
+        const GameState& gameState, const Move& move, const int threshold) {
     return staticExchangeEvaluationImpl</*ReturnBound =*/false, /*ReturnMeets =*/true>(
-            gameState, move, /*threshold*/ 0);
+            gameState, move, threshold);
 }

@@ -16,6 +16,7 @@
 [[nodiscard]] int staticExchangeEvaluationBound(
         const GameState& gameState, const Move& move, int threshold);
 
-// Equivalent to: staticExchangeEvaluation(gameState, move) >= 0
+// Equivalent to: staticExchangeEvaluation(gameState, move) >= threshold
 // But can return even earlier than staticExchangeEvaluationBound.
-[[nodiscard]] bool staticExchangeEvaluationNonLosing(const GameState& gameState, const Move& move);
+[[nodiscard]] bool staticExchangeEvaluationMeetsBound(
+        const GameState& gameState, const Move& move, int threshold);
