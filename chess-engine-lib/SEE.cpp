@@ -159,7 +159,7 @@ template <bool ReturnBound, bool ReturnMeets>
             return gain[0];
         }
     } else if constexpr (ReturnMeets) {
-        ASSUME(gain[0] > 0);  // if we pass threshold = 0, compiler can remove this branch
+        ASSUME(gain[0] >= 0);  // if we pass threshold = 0, compiler can remove this branch
         if (gain[0] < threshold) {
             return false;
         }

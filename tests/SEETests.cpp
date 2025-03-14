@@ -19,27 +19,51 @@ std::string getTestName(const ::testing::TestParamInfo<SEETestConfig>& info) {
 
 class SEETests : public ::testing::TestWithParam<SEETestConfig> {};
 
+void testSee(const GameState& gameState, const Move& move, int expectedScore) {
+    EXPECT_EQ(expectedScore, staticExchangeEvaluation(gameState, move));
+    EXPECT_EQ(expectedScore >= 0, staticExchangeEvaluationNonLosing(gameState, move));
+
+    for (int threshold = -1000; threshold <= expectedScore; ++threshold) {
+        // seeBound should be a lower bound l such that s >= l >= t.
+        const int seeBound = staticExchangeEvaluationBound(gameState, move, threshold);
+        EXPECT_GE(expectedScore, seeBound);
+        EXPECT_GE(seeBound, threshold);
+    }
+
+    for (int threshold = expectedScore + 1; threshold <= 1000; ++threshold) {
+        // seeBound should be an upper bound u such that s <= u < t.
+        const int seeBound = staticExchangeEvaluationBound(gameState, move, threshold);
+        EXPECT_LE(expectedScore, seeBound);
+        EXPECT_LT(seeBound, threshold);
+    }
+}
+
 TEST_P(SEETests, TestStaticExchangeEvaluation) {
+    const SEETestConfig config = GetParam();
+
+    const GameState gameState = GameState::fromFen(config.fen);
+
+    testSee(gameState, config.move, config.expectedScore);
+}
+
+TEST_P(SEETests, TestStaticExchangeEvaluationWithoutVictim) {
     const SEETestConfig config = GetParam();
 
     GameState gameState = GameState::fromFen(config.fen);
 
-    EXPECT_EQ(config.expectedScore, staticExchangeEvaluation(gameState, config.move));
-    EXPECT_EQ(config.expectedScore >= 0, staticExchangeEvaluationNonLosing(gameState, config.move));
+    const Piece victim             = getPiece(gameState.getPieceOnSquare(config.move.to));
+    int expectedScoreWithoutVictim = config.expectedScore - getStaticPieceValue(victim);
+    gameState.removePiece(config.move.to);
 
-    for (int threshold = -1000; threshold <= config.expectedScore; ++threshold) {
-        // seeBound should be a lower bound l such that s >= l >= t.
-        const int seeBound = staticExchangeEvaluationBound(gameState, config.move, threshold);
-        EXPECT_GE(config.expectedScore, seeBound);
-        EXPECT_GE(seeBound, threshold);
-    }
+    const MoveFlags flagsNonCapture =
+            (MoveFlags)((std::uint8_t)config.move.flags & ~(std::uint8_t)MoveFlags::IsCapture);
+    const Move moveNonCapture{
+            .pieceToMove = config.move.pieceToMove,
+            .from        = config.move.from,
+            .to          = config.move.to,
+            .flags       = flagsNonCapture};
 
-    for (int threshold = config.expectedScore + 1; threshold <= 1000; ++threshold) {
-        // seeBound should be an upper bound u such that s <= u < t.
-        const int seeBound = staticExchangeEvaluationBound(gameState, config.move, threshold);
-        EXPECT_LE(config.expectedScore, seeBound);
-        EXPECT_LT(seeBound, threshold);
-    }
+    testSee(gameState, moveNonCapture, expectedScoreWithoutVictim);
 }
 
 auto testCases = ::testing::Values(
