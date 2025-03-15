@@ -4,6 +4,7 @@
 
 #include <ranges>
 #include <sstream>
+#include <format>
 
 #include <cstring>
 

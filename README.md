@@ -155,22 +155,21 @@ These dependencies are managed using [vcpkg](https://vcpkg.io/en/) (for C++) and
 #### Windows
 
  - Open the root directory of the repository in Visual Studio 2022.
- - If needed, set up a CMakeUserPresets.json file. An [example](CMakeUserPresets.example.json) is
-   provided in the repository.
  - [Set up vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-cmd)
-   and set CMAKE_TOOLCHAIN_FILE to point to the vcpkg.cmake file.
+   and in CMakePresets.json, set CMAKE_TOOLCHAIN_FILE to point to the vcpkg.cmake file, and
+   VCPKG_ROOT to point the vcpkg root directory.
  - Build the solution. For best playing strength, build in Release mode.
 
-The project has been tested with Visual Studio 2022 Community Edition, version 17.11 (`_MSC_VER` 1941).
+The project has been tested with Visual Studio 2022 Community Edition, version 17.13 (`_MSC_VER` 1943).
 
 #### Linux
 
- - If needed, set up a CMakeUserPresets.json file. An [example](CMakeUserPresets.example.json) is
-   provided in the repository.
- - Set up [vcpkg](https://github.com/microsoft/vcpkg) and set CMAKE_TOOLCHAIN_FILE to point to the
-   vcpkg.cmake file.
- - Run `cmake` with appropriate options. E.g., if using a CMakeUserPresets similar to the example
-   file, run `cmake --preset linux-x64-release` to build in release mode.
+ - [Set up vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-cmd)
+   and in CMakePresets.json, set CMAKE_TOOLCHAIN_FILE to point to the vcpkg.cmake file, and
+   VCPKG_ROOT to point the vcpkg root directory.
+ - If needed, modify CMakePresets.json to match your build environment.
+ - Run `cmake` with appropriate options. E.g., run `cmake --preset linux-x64-release` to build in
+   release mode.
  - Run `cmake --build` on the output directory. E.g., `cmake --build out/build/linux-x64-release/`.
 
 The project has been tested with g++ 14.0. Note that in order to compile the tuner, you will need a
