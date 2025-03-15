@@ -527,6 +527,10 @@ StackVector<Move> MoveSearcher::Impl::extractPv(
 
         pv.push_back(*move);
         (void)gameState.makeMove(*move);
+
+        if (isDraw(gameState, stack)) {
+            break;
+        }
     }
 
     pv.lock();
