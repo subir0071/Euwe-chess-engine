@@ -91,6 +91,16 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "linux-clang-x64-release",
+      "displayName": "Linux Clang x64 Release",
+      "inherits": "linux-x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+		"CMAKE_C_COMPILER": "clang",
+		"CMAKE_CXX_COMPILER": "clang++"
+      }
     }
   ]
 }
