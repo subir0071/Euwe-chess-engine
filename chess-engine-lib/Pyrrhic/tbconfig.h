@@ -70,3 +70,8 @@ constexpr int popFirstSetPosition(std::uint64_t& x) {
 
 #define PYRRHIC_KING_ATTACKS(sq) \
     ((std::uint64_t)getPieceControlledSquares(Piece::King, (BoardPosition)(sq), {}))
+
+// Suppress some warnings that only occur with clang-cl
+#if defined(__clang__) && defined(_MSC_VER)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif

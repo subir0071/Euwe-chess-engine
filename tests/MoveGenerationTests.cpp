@@ -232,25 +232,25 @@ TEST_P(ValidateMoveStatsWithTTable, TestMoveStats) {
 
 // Positions and statistics taken from https://www.chessprogramming.org/Perft_Results
 
-inline const std::string kKiwipeteFen =
+namespace {
+const std::string kKiwipeteFen =
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
-inline const std::string kPosition3Fen = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
-inline const std::string kPosition4Fen =
+const std::string kPosition3Fen = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
+const std::string kPosition4Fen =
         "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1";
-inline const std::string kPosition5Fen =
-        "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
-inline const std::string kPosition6Fen =
+const std::string kPosition5Fen = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
+const std::string kPosition6Fen =
         "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
 
-inline const std::string kInCheckByPawn =
+const std::string kInCheckByPawn =
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q2/PPPBBPpP/R4K1R w kq - 0 1";
-inline const std::string kInCheckByPawnWithPinnedPawn = "8/2p5/3p4/KP5r/1R3p1k/6P1/4P3/8 b - - 0 1";
-inline const std::string kBlackAboutToPromote =
+const std::string kInCheckByPawnWithPinnedPawn = "8/2p5/3p4/KP5r/1R3p1k/6P1/4P3/8 b - - 0 1";
+const std::string kBlackAboutToPromote =
         "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P1RPP/R2Q2K1 b kq - 1 1";  // Promotion b2a1Q
-inline const std::string kEnPassantNoDiscoveredCheck = "8/8/3p4/KPp1P2r/1R3p2/6k1/6P1/8 w - c6 0 1";
-inline const std::string kEnPassantDiscoveredCheckBishop = "8/8/k7/8/2Pp4/8/8/5B1K b - c3 0 1";
-inline const std::string kEnPassantNoDiscoveredCheckVerticalRook =
-        "8/8/2k5/8/2Pp4/8/8/2R4K b - c3 0 1";
+const std::string kEnPassantNoDiscoveredCheck     = "8/8/3p4/KPp1P2r/1R3p2/6k1/6P1/8 w - c6 0 1";
+const std::string kEnPassantDiscoveredCheckBishop = "8/8/k7/8/2Pp4/8/8/5B1K b - c3 0 1";
+const std::string kEnPassantNoDiscoveredCheckVerticalRook = "8/8/2k5/8/2Pp4/8/8/2R4K b - c3 0 1";
+}  // namespace
 
 // Position 5: white about to promote (d7c8B), black captures promoted piece (d8c8)
 
@@ -588,19 +588,19 @@ auto testCasesSlow = ::testing::Values(
         TestStatsConfig{
                 .fen = kPosition6Fen, .depth = 5, .expectedStats = {.numMoves = 164'075'551}});
 
-INSTANTIATE_TEST_CASE_P(MoveGeneration, ValidateMoveStats, testCasesFast, validateMoveStatsName);
+INSTANTIATE_TEST_SUITE_P(MoveGeneration, ValidateMoveStats, testCasesFast, validateMoveStatsName);
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         MoveGeneration, ValidateMoveStatsWithUnmake, testCasesFast, validateMoveStatsName);
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         MoveGeneration, ValidateMoveStatsWithTTable, testCasesFast, validateMoveStatsName);
 
 #ifdef NDEBUG
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         MoveGenerationSlow, ValidateMoveStatsWithUnmake, testCasesSlow, validateMoveStatsName);
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         MoveGenerationSlow, ValidateMoveStatsWithTTable, testCasesSlow, validateMoveStatsName);
 #endif
 

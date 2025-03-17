@@ -142,15 +142,16 @@ TEST_P(HashCollisionTests, FindPawnKingHashCollisions) {
     findPawnKingHashCollisions(gameState, config.depth, stack);
 }
 
-inline const std::string kKiwipeteFen =
+namespace {
+const std::string kKiwipeteFen =
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
-inline const std::string kPosition3Fen = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
-inline const std::string kPosition4Fen =
+const std::string kPosition3Fen = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
+const std::string kPosition4Fen =
         "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1";
-inline const std::string kPosition5Fen =
-        "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
-inline const std::string kPosition6Fen =
+const std::string kPosition5Fen = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
+const std::string kPosition6Fen =
         "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
+}  // namespace
 
 std::string hashTestName(const ::testing::TestParamInfo<HashCollisionTestConfig>& info) {
     std::string fenName = "";
@@ -179,7 +180,7 @@ auto testCases = ::testing::Values(
         HashCollisionTestConfig{.fen = kPosition5Fen, .depth = 3},
         HashCollisionTestConfig{.fen = kPosition6Fen, .depth = 3});
 
-INSTANTIATE_TEST_CASE_P(HashCollisionTests, HashCollisionTests, testCases, hashTestName);
+INSTANTIATE_TEST_SUITE_P(HashCollisionTests, HashCollisionTests, testCases, hashTestName);
 
 TEST(HashingTests, NullMoveEnPassantHashing) {
     const HashT withEnPassantTarget =

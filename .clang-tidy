@@ -12,3 +12,4 @@ ExtraArgs:
     - -Wno-pragma-once-outside-header
     # Triggers on pragmas in the MSVC stdlib
     - -Wno-unknown-pragmas
+    - -std=c++23

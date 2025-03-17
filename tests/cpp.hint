@@ -1,4 +1,4 @@
-# define INSTANTIATE_TEST_CASE_P(prefix, test_case_name, generator, ...) \
+# define INSTANTIATE_TEST_SUITE_P(prefix, test_case_name, generator, ...) \
   static ::testing::internal::ParamGenerator<test_case_name::ParamType> \
       gtest_##prefix##test_case_name##_EvalGenerator_() { return generator; } \
   static ::std::string gtest_##prefix##test_case_name##_EvalGenerateName_( \

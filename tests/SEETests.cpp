@@ -334,6 +334,6 @@ auto testCases = ::testing::Values(
                 .move = Move{.pieceToMove = Piece::King, .from = BoardPosition::E1, .to = BoardPosition::G1, .flags = MoveFlags::IsCastle},
                 .expectedScore = 0});
 
-INSTANTIATE_TEST_CASE_P(SEETests, SEETests, testCases, getTestName);
+INSTANTIATE_TEST_SUITE_P(SEETests, SEETests, testCases, getTestName);
 
 }  // namespace SEETests
