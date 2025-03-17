@@ -6,6 +6,7 @@
 #include "Math.h"
 #include "MyAssert.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <ranges>
 
@@ -18,9 +19,8 @@ namespace {
 
 [[nodiscard]] FORCE_INLINE std::uint64_t getSyzygyPieceBb(
         const GameState& gameState, const Piece piece) {
-    return (std::uint64_t)(
-            gameState.getPieceBitBoard(Side::White, piece)
-            | gameState.getPieceBitBoard(Side::Black, piece));
+    return (std::uint64_t)(gameState.getPieceBitBoard(Side::White, piece)
+                           | gameState.getPieceBitBoard(Side::Black, piece));
 }
 
 [[nodiscard]] FORCE_INLINE unsigned getSyzygyEnPassantTarget(const GameState& gameState) {

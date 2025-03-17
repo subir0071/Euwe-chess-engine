@@ -10,6 +10,7 @@
 #include <optional>
 
 #include <cstdint>
+#include <cstring>
 
 enum ScoreType : std::uint8_t {
     NotSet     = 0,
