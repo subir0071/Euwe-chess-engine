@@ -206,19 +206,19 @@ GameState GameState::startingPosition() {
 }
 
 bool GameState::isInCheck() const {
-    return isInCheck(getEnemyControl());
+    return isInCheck(getBoardControl());
 }
 
 StackVector<Move> GameState::generateMoves(StackOfVectors<Move>& stack, bool capturesOnly) const {
-    const BitBoard enemyControl = getEnemyControl();
-    return generateMoves(stack, enemyControl, capturesOnly);
+    const BoardControl boardControl = getBoardControl();
+    return generateMoves(stack, boardControl, capturesOnly);
 }
 
 StackVector<Move> GameState::generateMoves(
-        StackOfVectors<Move>& stack, BitBoard enemyControl, bool capturesOnly) const {
+        StackOfVectors<Move>& stack, const BoardControl& boardControl, bool capturesOnly) const {
 
-    if (isInCheck(enemyControl)) {
-        return generateMovesInCheck(stack, enemyControl, capturesOnly);
+    if (isInCheck(boardControl)) {
+        return generateMovesInCheck(stack, boardControl, capturesOnly);
     }
 
     StackVector<Move> moves = stack.makeStackVector();
@@ -255,6 +255,8 @@ StackVector<Move> GameState::generateMoves(
 
     const BitBoard anyOccupancy = getAnyOccupancy();
 
+    int pieceControlIdx = sideToMove_ == Side::White ? 0 : boardControl.blackControlStartIdx;
+
     // Generate moves for normal pieces (non-pawns excl. king)
     for (int pieceIdx = 1; pieceIdx < kNumPieceTypes - 1; ++pieceIdx) {
         const Piece piece = (Piece)pieceIdx;
@@ -264,8 +266,7 @@ StackVector<Move> GameState::generateMoves(
         while (pieceBitBoard != BitBoard::Empty) {
             const BoardPosition piecePosition = popFirstSetPosition(pieceBitBoard);
             const BitBoard piecePinBitBoard   = getPiecePinBitBoard(piecePosition);
-            const BitBoard controlledSquares =
-                    getPieceControlledSquares(piece, piecePosition, anyOccupancy);
+            const BitBoard& controlledSquares = boardControl.pieceControl[pieceControlIdx++];
 
             generateSinglePieceMovesFromControl(
                     piece,
@@ -279,12 +280,14 @@ StackVector<Move> GameState::generateMoves(
     }
 
     // Generate king moves
+    const BitBoard& enemyControl = boardControl.getEnemyControl(sideToMove_);
 
     // Normal king moves
     const BoardPosition kingPosition =
             getFirstSetPosition(getPieceBitBoard(sideToMove_, Piece::King));
     // King can't walk into check
-    const BitBoard kingControlledSquares = getKingControlledSquares(kingPosition) & ~enemyControl;
+    const BitBoard kingControlledSquares =
+            boardControl.pieceControl[pieceControlIdx++] & ~enemyControl;
     generateSinglePieceMovesFromControl(
             Piece::King,
             kingPosition,
@@ -310,7 +313,7 @@ StackVector<Move> GameState::generateMoves(
 }
 
 StackVector<Move> GameState::generateMovesInCheck(
-        StackOfVectors<Move>& stack, const BitBoard enemyControl, bool capturesOnly) const {
+        StackOfVectors<Move>& stack, const BoardControl& boardControl, bool capturesOnly) const {
     StackVector<Move> moves = stack.makeStackVector();
 
     const BoardPosition kingPosition =
@@ -343,7 +346,7 @@ StackVector<Move> GameState::generateMovesInCheck(
 
     BitBoard kingControlledSquares = getKingControlledSquares(kingPosition);
     // King can't walk into check
-    kingControlledSquares = kingControlledSquares & ~enemyControl;
+    kingControlledSquares = kingControlledSquares & ~boardControl.getEnemyControl(sideToMove_);
     kingControlledSquares = kingControlledSquares & ~kingAttackBitBoard;
     generateSinglePieceMovesFromControl(
             Piece::King,
@@ -419,6 +422,8 @@ StackVector<Move> GameState::generateMovesInCheck(
             capturesOnly,
             pawnBlockOrCaptureBitBoard);
 
+    int pieceControlIdx = sideToMove_ == Side::White ? 0 : boardControl.blackControlStartIdx;
+
     // Generate moves for normal pieces (non-pawns excl. king)
     for (int pieceIdx = 1; pieceIdx < kNumPieceTypes - 1; ++pieceIdx) {
         const Piece piece = (Piece)pieceIdx;
@@ -428,14 +433,15 @@ StackVector<Move> GameState::generateMovesInCheck(
         while (pieceBitBoard != BitBoard::Empty) {
             const BoardPosition piecePosition = popFirstSetPosition(pieceBitBoard);
 
+            const int thisPieceControlIdx = pieceControlIdx++;
+
             if (pinBitBoard & piecePosition) {
                 // Piece is pinned; can't capture pinning piece or remain in pin because that wouldn't
                 // resolve the check, so no moves.
                 continue;
             }
 
-            const BitBoard controlledSquares =
-                    getPieceControlledSquares(piece, piecePosition, anyOccupancy);
+            const BitBoard& controlledSquares = boardControl.pieceControl[thisPieceControlIdx];
 
             // Treat blockOrCapture as a pin. This will cause only moves that block or capture to be generated.
             generateSinglePieceMovesFromControl(
@@ -1037,31 +1043,47 @@ bool GameState::enPassantWillPutUsInCheck() const {
     return false;
 }
 
-BitBoard GameState::getEnemyControl() const {
-    const Side enemySide    = nextSide(sideToMove_);
+FORCE_INLINE BoardControl GameState::getBoardControl() const {
+    BoardControl boardControl{};
+    int pieceControlIdx = 0;
+
     const BitBoard anyPiece = getAnyOccupancy();
 
-    BitBoard enemyControl = BitBoard::Empty;
+    for (int sideIdx = 0; sideIdx < kNumSides; ++sideIdx) {
+        const Side side = (Side)sideIdx;
 
-    enemyControl = getPawnControlledSquares(getPieceBitBoard(enemySide, Piece::Pawn), enemySide);
+        if (side == Side::Black) {
+            boardControl.blackControlStartIdx = pieceControlIdx;
+        }
 
-    for (int pieceIdx = (int)Piece::Pawn + 1; pieceIdx <= (int)Piece::King; ++pieceIdx) {
-        const Piece piece = (Piece)pieceIdx;
+        BitBoard& sideControl = boardControl.sideControl[sideIdx];
 
-        BitBoard pieceBitBoard = getPieceBitBoard(enemySide, piece);
+        BitBoard& pawnControl       = boardControl.pieceTypeControl[sideIdx][(int)Piece::Pawn];
+        const BitBoard pawnBitBoard = getPieceBitBoard(side, Piece::Pawn);
+        pawnControl                 = getPawnControlledSquares(pawnBitBoard, side);
+        sideControl |= pawnControl;
 
-        while (pieceBitBoard != BitBoard::Empty) {
-            const BoardPosition piecePosition = popFirstSetPosition(pieceBitBoard);
+        for (int pieceTypeIdx = (int)Piece::Knight; pieceTypeIdx < kNumPieceTypes; ++pieceTypeIdx) {
+            const Piece piece          = (Piece)pieceTypeIdx;
+            BitBoard& pieceTypeControl = boardControl.pieceTypeControl[sideIdx][pieceTypeIdx];
 
-            const BitBoard pieceControl = getPieceControlledSquares(piece, piecePosition, anyPiece);
-            enemyControl |= pieceControl;
+            BitBoard pieceBitBoard = getPieceBitBoard(side, piece);
+            while (pieceBitBoard != BitBoard::Empty) {
+                const BoardPosition piecePosition = popFirstSetPosition(pieceBitBoard);
+                BitBoard& pieceControl            = boardControl.pieceControl[pieceControlIdx++];
+
+                pieceControl = getPieceControlledSquares(piece, piecePosition, anyPiece);
+                pieceTypeControl |= pieceControl;
+            }
+            sideControl |= pieceTypeControl;
         }
     }
 
-    return enemyControl;
+    return boardControl;
 }
 
-bool GameState::isInCheck(const BitBoard enemyControl) const {
+bool GameState::isInCheck(const BoardControl& boardControl) const {
+    const BitBoard& enemyControl = boardControl.getEnemyControl(sideToMove_);
     return enemyControl & getFirstSetPosition(getPieceBitBoard(sideToMove_, Piece::King));
 }
 

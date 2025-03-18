@@ -51,8 +51,8 @@ std::pair<EvalT, GameState> quiesce(
         return {0, gameState};
     }
 
-    const BitBoard enemyControl = gameState.getEnemyControl();
-    const bool isInCheck        = gameState.isInCheck(enemyControl);
+    const BoardControl boardControl = gameState.getBoardControl();
+    const bool isInCheck            = gameState.isInCheck(boardControl);
 
     EvalT standPat = -kInfiniteEval;
     if (!isInCheck) {
@@ -68,13 +68,13 @@ std::pair<EvalT, GameState> quiesce(
     EvalT bestScore     = standPat;
     GameState bestState = gameState;
 
-    auto moves = gameState.generateMoves(stack, enemyControl, /*capturesOnly =*/!isInCheck);
+    auto moves = gameState.generateMoves(stack, boardControl, /*capturesOnly =*/!isInCheck);
     if (moves.size() == 0) {
         if (isInCheck) {
             return {-kMateEval, gameState};
         }
 
-        const auto allMoves = gameState.generateMoves(stack, enemyControl);
+        const auto allMoves = gameState.generateMoves(stack, boardControl);
         if (allMoves.size() == 0) {
             // No legal moves, not in check, so stalemate.
             return {0, gameState};

@@ -89,6 +89,14 @@ void updateStatistics(const MoveStatistics& statisticsToAdd, MoveStatistics& sta
 void countMoveStatisticsAtPly(
         GameState& gameState, int ply, MoveStatistics& statistics, StackOfVectors<Move>& stack) {
     const StackVector<Move> moves = gameState.generateMoves(stack);
+
+    const BoardControl boardControl          = gameState.getBoardControl();
+    const StackVector<Move> movesFromControl = gameState.generateMoves(stack, boardControl);
+
+    EXPECT_EQ(moves.size(), movesFromControl.size());
+    EXPECT_TRUE(std::equal(
+            moves.begin(), moves.end(), movesFromControl.begin(), movesFromControl.end()));
+
     if (ply == 0) {
         return;
     }
@@ -106,6 +114,14 @@ void countMoveStatisticsAtPly(
 void countMoveStatisticsAtPlyWithUnmake(
         GameState& gameState, int ply, MoveStatistics& statistics, StackOfVectors<Move>& stack) {
     const StackVector<Move> moves = gameState.generateMoves(stack);
+
+    const BoardControl boardControl          = gameState.getBoardControl();
+    const StackVector<Move> movesFromControl = gameState.generateMoves(stack, boardControl);
+
+    EXPECT_EQ(moves.size(), movesFromControl.size());
+    EXPECT_TRUE(std::equal(
+            moves.begin(), moves.end(), movesFromControl.begin(), movesFromControl.end()));
+
     if (ply == 0) {
         return;
     }
@@ -144,8 +160,17 @@ MoveStatistics countMoveStatisticsAtPlyWithTTable(
     }
 
     MoveStatistics statistics{};
-    statistics.ply                = ply;
+    statistics.ply = ply;
+
     const StackVector<Move> moves = gameState.generateMoves(stack);
+
+    const BoardControl boardControl          = gameState.getBoardControl();
+    const StackVector<Move> movesFromControl = gameState.generateMoves(stack, boardControl);
+
+    EXPECT_EQ(moves.size(), movesFromControl.size());
+    EXPECT_TRUE(std::equal(
+            moves.begin(), moves.end(), movesFromControl.begin(), movesFromControl.end()));
+
     if (ply == 0) {
         return statistics;
     }

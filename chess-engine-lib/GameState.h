@@ -24,6 +24,22 @@
 
 using PieceBitBoards = std::array<std::array<BitBoard, kNumPieceTypes>, kNumSides>;
 
+struct BoardControl {
+    std::array<BitBoard, kNumSides> sideControl;
+    std::array<std::array<BitBoard, kNumPieceTypes>, kNumSides> pieceTypeControl;
+
+    // See: https://chess.stackexchange.com/questions/5343/maximum-number-of-non-pawn-pieces-on-the-board
+    // 26 non-pawns, non-kings, so 28 total including kings.
+    static constexpr int kMaxNumNonPawns = 28;
+    std::array<BitBoard, kMaxNumNonPawns> pieceControl;
+
+    int blackControlStartIdx = 0;
+
+    const BitBoard& getEnemyControl(const Side sideToMove) const {
+        return sideControl[(int)nextSide(sideToMove)];
+    }
+};
+
 class GameState {
   public:
     enum class CastlingRights : uint8_t {
@@ -53,10 +69,10 @@ class GameState {
     [[nodiscard]] std::string toFenNoMoveCounters() const;
     [[nodiscard]] std::string toVisualString() const;
 
-    [[nodiscard]] BitBoard getEnemyControl() const;
+    [[nodiscard]] BoardControl getBoardControl() const;
 
     [[nodiscard]] bool isInCheck() const;
-    [[nodiscard]] bool isInCheck(BitBoard enemyControl) const;
+    [[nodiscard]] bool isInCheck(const BoardControl& boardControl) const;
     [[nodiscard]] bool isRepetition(int repetitionThreshold = 3) const;
     [[nodiscard]] bool isFiftyMoves() const;
 
@@ -68,9 +84,13 @@ class GameState {
     [[nodiscard]] StackVector<Move> generateMoves(
             StackOfVectors<Move>& stack, bool capturesOnly = false) const;
     [[nodiscard]] StackVector<Move> generateMoves(
-            StackOfVectors<Move>& stack, BitBoard enemyControl, bool capturesOnly = false) const;
+            StackOfVectors<Move>& stack,
+            const BoardControl& boardControl,
+            bool capturesOnly = false) const;
     [[nodiscard]] StackVector<Move> generateMovesInCheck(
-            StackOfVectors<Move>& stack, BitBoard enemyControl, bool capturesOnly = false) const;
+            StackOfVectors<Move>& stack,
+            const BoardControl& boardControl,
+            bool capturesOnly = false) const;
 
     UnmakeMoveInfo makeMove(const Move& move);
     UnmakeMoveInfo makeNullMove();

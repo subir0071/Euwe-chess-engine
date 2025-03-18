@@ -659,8 +659,8 @@ EvalT MoveSearcher::Impl::search(
         }
     }
 
-    const BitBoard enemyControl = gameState.getEnemyControl();
-    const bool isInCheck        = gameState.isInCheck(enemyControl);
+    const BoardControl boardControl = gameState.getBoardControl();
+    const bool isInCheck            = gameState.isInCheck(boardControl);
 
     const int extension = getDepthExtension(isInCheck, lastMove);
     if (ply > 0) {
@@ -849,7 +849,7 @@ EvalT MoveSearcher::Impl::search(
     }
 
     auto moves = ply == 0 && rootMovesToSearch_ ? stack.makeStackVector(*rootMovesToSearch_)
-                                                : gameState.generateMoves(stack, enemyControl);
+                                                : gameState.generateMoves(stack, boardControl);
     if (moves.size() == 0) {
         // Exact value
         return evaluateNoLegalMoves(gameState);
@@ -980,8 +980,8 @@ EvalT MoveSearcher::Impl::quiesce(
         return *endStateValue;
     }
 
-    const BitBoard enemyControl = gameState.getEnemyControl();
-    const bool isInCheck        = gameState.isInCheck(enemyControl);
+    const BoardControl boardControl = gameState.getBoardControl();
+    const bool isInCheck            = gameState.isInCheck(boardControl);
 
     bool completedAnySearch = false;
     const EvalT alphaOrig   = alpha;
@@ -1132,7 +1132,7 @@ EvalT MoveSearcher::Impl::quiesce(
         }
     }
 
-    auto moves = gameState.generateMoves(stack, enemyControl, /*capturesOnly =*/!isInCheck);
+    auto moves = gameState.generateMoves(stack, boardControl, /*capturesOnly =*/!isInCheck);
     if (moves.size() == 0) {
         if (isInCheck) {
             // We ran full move generation, so no legal moves exist, and we're in check, so it's a
@@ -1144,7 +1144,7 @@ EvalT MoveSearcher::Impl::quiesce(
 
         // Check if we're in an end state by generating all moves.
         // Note that this ignores repetitions and 50 move rule.
-        const auto allMoves = gameState.generateMoves(stack, enemyControl);
+        const auto allMoves = gameState.generateMoves(stack, boardControl);
         if (allMoves.size() == 0) {
             // No legal moves, not in check, so stalemate.
             return 0;
