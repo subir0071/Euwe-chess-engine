@@ -17,9 +17,6 @@ struct EvalWithGradient {
 using PstMapping = std::array<std::int8_t, kSquares>;
 
 struct PawnKingEvalInfo {
-    BitBoard whitePawnControl = BitBoard::Empty;
-    BitBoard blackPawnControl = BitBoard::Empty;
-
     EvalCalcT earlyEval = 0.;
     EvalCalcT lateEval  = 0.;
 
@@ -69,6 +66,8 @@ class Evaluator {
     [[nodiscard]] EvalWithGradient evaluateWithGradient(const GameState& gameState) const;
 
     [[nodiscard]] EvalT evaluate(const GameState& gameState) const;
+    [[nodiscard]] EvalT evaluate(
+            const GameState& gameState, const BoardControl& boardControl) const;
 
     void prefetch(const GameState& gameState) const;
 

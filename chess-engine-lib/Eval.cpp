@@ -122,8 +122,6 @@ struct PiecePositionEvaluation {
 
     TermWithGradient<CalcJacobians> phaseMaterial{};
 
-    BitBoard control     = BitBoard::Empty;
-    BitBoard kingAttack  = BitBoard::Empty;
     int numKingAttackers = 0;
 
     const PstMapping* pstIndex;
@@ -175,18 +173,13 @@ template <bool CalcJacobians>
 FORCE_INLINE void updateMobilityEvaluation(
         const Evaluator::EvalCalcParams& params,
         const Piece piece,
-        const BoardPosition position,
-        const BitBoard anyPiece,
+        const BoardControl& boardControl,
+        int& pieceControlIdx,
         const BitBoard ownOccupancy,
         const BitBoard enemyKingArea,
         PiecePositionEvaluation<CalcJacobians>& result) {
-    const BitBoard control    = getPieceControlledSquares(piece, position, anyPiece);
-    const BitBoard kingAttack = control & enemyKingArea;
-
-    result.control |= control;
-    result.kingAttack |= kingAttack;
-
-    const bool isAttacker = kingAttack != BitBoard::Empty;
+    const BitBoard& control = boardControl.pieceControl[pieceControlIdx++];
+    const bool isAttacker   = (control & enemyKingArea) != BitBoard::Empty;
 
     result.numKingAttackers += isAttacker;
     updateTaperedTerm(params, params.kingAttackWeight[(int)piece], result.eval, isAttacker);
@@ -355,6 +348,7 @@ template <bool CalcJacobians>
 void evaluatePiecePositionsForSide(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const Side side,
         const BoardPosition ownKingPosition,
         const BoardPosition enemyKingPosition,
@@ -372,6 +366,8 @@ void evaluatePiecePositionsForSide(
 
     const auto& ownKingTropisms   = kTropisms[(int)ownKingPosition];
     const auto& enemyKingTropisms = kTropisms[(int)enemyKingPosition];
+
+    int pieceControlIdx = boardControl.getPieceControlStartIdx(side);
 
     // Knights
     {
@@ -399,7 +395,13 @@ void evaluatePiecePositionsForSide(
             updateTaperedTerm(params, params.knightPawnAdjustment[numOwnPawns], result.eval, 1);
 
             updateMobilityEvaluation<CalcJacobians>(
-                    params, Piece::Knight, position, anyPiece, ownOccupancy, enemyKingArea, result);
+                    params,
+                    Piece::Knight,
+                    boardControl,
+                    pieceControlIdx,
+                    ownOccupancy,
+                    enemyKingArea,
+                    result);
         }
     }
 
@@ -450,7 +452,13 @@ void evaluatePiecePositionsForSide(
                     result.eval);
 
             updateMobilityEvaluation<CalcJacobians>(
-                    params, Piece::Bishop, position, anyPiece, ownOccupancy, enemyKingArea, result);
+                    params,
+                    Piece::Bishop,
+                    boardControl,
+                    pieceControlIdx,
+                    ownOccupancy,
+                    enemyKingArea,
+                    result);
         }
 
         if (hasBishopOfColor[0] && hasBishopOfColor[1]) {
@@ -494,7 +502,13 @@ void evaluatePiecePositionsForSide(
             updateTaperedTerm(params, params.rookPawnAdjustment[numOwnPawns], result.eval, 1);
 
             updateMobilityEvaluation<CalcJacobians>(
-                    params, Piece::Rook, position, anyPiece, ownOccupancy, enemyKingArea, result);
+                    params,
+                    Piece::Rook,
+                    boardControl,
+                    pieceControlIdx,
+                    ownOccupancy,
+                    enemyKingArea,
+                    result);
         }
     }
 
@@ -519,7 +533,13 @@ void evaluatePiecePositionsForSide(
             updateTaperedTerm(params, params.queenPawnAdjustment[numOwnPawns], result.eval, 1);
 
             updateMobilityEvaluation<CalcJacobians>(
-                    params, Piece::Queen, position, anyPiece, ownOccupancy, enemyKingArea, result);
+                    params,
+                    Piece::Queen,
+                    boardControl,
+                    pieceControlIdx,
+                    ownOccupancy,
+                    enemyKingArea,
+                    result);
         }
     }
 
@@ -532,8 +552,9 @@ void evaluatePiecePositionsForSide(
 
         // Note king attack data between kings was calculated during initialization.
 
-        // King safety. Note: we rely on the king being evaluated last, so that king attack data is complete.
-        const int controlNearEnemyKing = popCount(result.kingAttack);
+        // King safety.
+        const int controlNearEnemyKing =
+                popCount(boardControl.sideControl[(int)side] & enemyKingArea);
 
         updateTaperedTerm(
                 params, params.controlNearEnemyKing[controlNearEnemyKing], result.eval, 1);
@@ -551,10 +572,12 @@ template <bool CalcJacobians>
 FORCE_INLINE void evaluateAttackDefend(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const Side side,
-        const BitBoard ownControl,
-        const BitBoard enemyControl,
         TaperedEvaluation<CalcJacobians>& eval) {
+    const BitBoard& ownControl   = boardControl.sideControl[(int)side];
+    const BitBoard& enemyControl = boardControl.sideControl[(int)nextSide(side)];
+
     const std::array<BitBoard, 3> attackDefendBitBoards = {
             ownControl & ~enemyControl,  // defended, not attacked
             ~ownControl & enemyControl,  // not defended, attacked (hanging)
@@ -718,6 +741,7 @@ template <bool CalcJacobians>
 void evaluatePawnKingForSide(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const Side side,
         const BoardPosition ownKingPosition,
         const BoardPosition enemyKingPosition,
@@ -800,12 +824,8 @@ void evaluatePawnKingForSide(
                 params, ownKingPosition, enemyKingPosition, tropismIdx, position, result.eval);
     }
 
-    const BitBoard pawnControl = getPawnControlledSquares(ownPawns, side);
-    result.control |= pawnControl;
-
-    const BitBoard kingAttack = enemyKingArea & pawnControl;
-    result.kingAttack |= kingAttack;
-
+    const BitBoard& pawnControl  = boardControl.pieceTypeControl[(int)side][(int)Piece::Pawn];
+    const BitBoard kingAttack    = enemyKingArea & pawnControl;
     const int numAttackedSquares = popCount(kingAttack);
     result.numKingAttackers += numAttackedSquares;
 
@@ -858,13 +878,7 @@ FORCE_INLINE void updateControlForKing(
         PiecePositionEvaluation<CalcJacobians>& blackResult) {
     const BitBoard kingOverlap      = whiteKingArea & blackKingArea;
     const bool kingsAttackEachOther = kingOverlap != BitBoard::Empty;
-
-    whiteResult.control |= whiteKingArea;
-    whiteResult.kingAttack |= kingOverlap;
     whiteResult.numKingAttackers += kingsAttackEachOther;
-
-    blackResult.control |= blackKingArea;
-    blackResult.kingAttack |= kingOverlap;
     blackResult.numKingAttackers += kingsAttackEachOther;
 }
 
@@ -872,6 +886,7 @@ template <bool CalcJacobians>
 FORCE_INLINE void evaluatePawnKing(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const BoardPosition whiteKingPosition,
         const BoardPosition blackKingPosition,
         const BitBoard whiteKingArea,
@@ -885,6 +900,7 @@ FORCE_INLINE void evaluatePawnKing(
     evaluatePawnKingForSide(
             params,
             gameState,
+            boardControl,
             Side::White,
             whiteKingPosition,
             blackKingPosition,
@@ -896,6 +912,7 @@ FORCE_INLINE void evaluatePawnKing(
     evaluatePawnKingForSide(
             params,
             gameState,
+            boardControl,
             Side::Black,
             blackKingPosition,
             whiteKingPosition,
@@ -906,9 +923,6 @@ FORCE_INLINE void evaluatePawnKing(
 
     if (!pawnKingEvalHashTable.empty()) {
         const PawnKingEvalInfo pawnKingEvalInfo{
-                .whitePawnControl = whiteResult.control,
-                .blackPawnControl = blackResult.control,
-
                 .earlyEval = whiteResult.eval.early.value - blackResult.eval.early.value,
                 .lateEval  = whiteResult.eval.late.value - blackResult.eval.late.value,
 
@@ -933,6 +947,7 @@ FORCE_INLINE void evaluatePawnKing(
 FORCE_INLINE void useStoredPawnKingEval(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const BitBoard whiteKingArea,
         const BitBoard blackKingArea,
         const PawnKingEvalInfo& pawnKingEvalInfo,
@@ -946,29 +961,27 @@ FORCE_INLINE void useStoredPawnKingEval(
     whiteResult.phaseMaterial.value += pawnKingEvalInfo.phaseMaterial;
 
     /*
-    const BitBoard pawnControl = getPawnControlledSquares(ownPawns, side);
-    result.control |= pawnControl;
-
-    const BitBoard kingAttack = enemyKingArea & pawnControl;
-    result.kingAttack |= kingAttack;
-
+    const BitBoard& pawnControl  = boardControl.pieceTypeControl[(int)side][(int)Piece::Pawn];
+    const BitBoard kingAttack    = enemyKingArea & pawnControl;
     const int numAttackedSquares = popCount(kingAttack);
     result.numKingAttackers += numAttackedSquares;
     */
     const auto updateFromControlForSide = [](const BitBoard pawnControl,
                                              const BitBoard enemyKingArea,
                                              PiecePositionEvaluation<false>& result) {
-        result.control |= pawnControl;
-
-        const BitBoard kingAttack = enemyKingArea & pawnControl;
-        result.kingAttack |= kingAttack;
-
+        const BitBoard kingAttack    = enemyKingArea & pawnControl;
         const int numAttackedSquares = popCount(kingAttack);
         result.numKingAttackers += numAttackedSquares;
     };
 
-    updateFromControlForSide(pawnKingEvalInfo.whitePawnControl, blackKingArea, whiteResult);
-    updateFromControlForSide(pawnKingEvalInfo.blackPawnControl, whiteKingArea, blackResult);
+    updateFromControlForSide(
+            boardControl.pieceTypeControl[(int)Side::White][(int)Piece::Pawn],
+            blackKingArea,
+            whiteResult);
+    updateFromControlForSide(
+            boardControl.pieceTypeControl[(int)Side::Black][(int)Piece::Pawn],
+            whiteKingArea,
+            blackResult);
 
     updateControlForKing(whiteKingArea, blackKingArea, whiteResult, blackResult);
 
@@ -991,6 +1004,7 @@ template <bool CalcJacobians>
 FORCE_INLINE void evaluatePawnKingOrRetrieve(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const BoardPosition whiteKingPosition,
         const BoardPosition blackKingPosition,
         const BitBoard whiteKingArea,
@@ -1006,6 +1020,7 @@ FORCE_INLINE void evaluatePawnKingOrRetrieve(
                 useStoredPawnKingEval(
                         params,
                         gameState,
+                        boardControl,
                         whiteKingArea,
                         blackKingArea,
                         *retrievedInfo,
@@ -1020,6 +1035,7 @@ FORCE_INLINE void evaluatePawnKingOrRetrieve(
     evaluatePawnKing(
             params,
             gameState,
+            boardControl,
             whiteKingPosition,
             blackKingPosition,
             whiteKingArea,
@@ -1181,6 +1197,7 @@ template <bool CalcJacobians>
 [[nodiscard]] FORCE_INLINE TermWithGradient<CalcJacobians> evaluateForWhite(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
+        const BoardControl& boardControl,
         PawnKingEvalHashTable& pawnKingEvalHashTable) {
 
     const BoardPosition whiteKingPosition =
@@ -1209,6 +1226,7 @@ template <bool CalcJacobians>
     evaluatePawnKingOrRetrieve(
             params,
             gameState,
+            boardControl,
             whiteKingPosition,
             blackKingPosition,
             whiteKingArea,
@@ -1220,6 +1238,7 @@ template <bool CalcJacobians>
     evaluatePiecePositionsForSide(
             params,
             gameState,
+            boardControl,
             Side::White,
             whiteKingPosition,
             blackKingPosition,
@@ -1228,27 +1247,16 @@ template <bool CalcJacobians>
     evaluatePiecePositionsForSide(
             params,
             gameState,
+            boardControl,
             Side::Black,
             blackKingPosition,
             whiteKingPosition,
             whiteKingArea,
             blackPiecePositionEval);
 
-    evaluateAttackDefend(
-            params,
-            gameState,
-            Side::White,
-            whitePiecePositionEval.control,
-            blackPiecePositionEval.control,
-            whitePiecePositionEval.eval);
+    evaluateAttackDefend(params, gameState, boardControl, Side::White, whitePiecePositionEval.eval);
 
-    evaluateAttackDefend(
-            params,
-            gameState,
-            Side::Black,
-            blackPiecePositionEval.control,
-            whitePiecePositionEval.control,
-            blackPiecePositionEval.eval);
+    evaluateAttackDefend(params, gameState, boardControl, Side::Black, blackPiecePositionEval.eval);
 
     const EvalCalcT tempoFactor = gameState.getSideToMove() == Side::White ? 1 : -1;
     updateTaperedTerm(params, params.tempoBonus, whitePiecePositionEval.eval, tempoFactor);
@@ -1404,21 +1412,28 @@ FORCE_INLINE int Evaluator::getPieceSquareValue(
 }
 
 EvalCalcT Evaluator::evaluateRaw(const GameState& gameState) const {
-    const auto rawEvalWhite = evaluateForWhite<false>(params_, gameState, pawnKingEvalHashTable_);
+    const auto rawEvalWhite = evaluateForWhite<false>(
+            params_, gameState, gameState.getBoardControl(), pawnKingEvalHashTable_);
 
     return gameState.getSideToMove() == Side::White ? rawEvalWhite.value : -rawEvalWhite.value;
 }
 
 EvalWithGradient Evaluator::evaluateWithGradient(const GameState& gameState) const {
-    const auto rawEvalWhite = evaluateForWhite<true>(params_, gameState, pawnKingEvalHashTable_);
+    const auto rawEvalWhite = evaluateForWhite<true>(
+            params_, gameState, gameState.getBoardControl(), pawnKingEvalHashTable_);
 
     const EvalCalcT colorFactor = gameState.getSideToMove() == Side::White ? 1 : -1;
 
     return {.eval = colorFactor * rawEvalWhite.value, .gradient = colorFactor * rawEvalWhite.grad};
 }
 
-EvalT Evaluator::evaluate(const GameState& gameState) const {
-    const auto rawEvalWhite = evaluateForWhite<false>(params_, gameState, pawnKingEvalHashTable_);
+FORCE_INLINE EvalT Evaluator::evaluate(const GameState& gameState) const {
+    return evaluate(gameState, gameState.getBoardControl());
+}
+
+EvalT Evaluator::evaluate(const GameState& gameState, const BoardControl& boardControl) const {
+    const auto rawEvalWhite =
+            evaluateForWhite<false>(params_, gameState, boardControl, pawnKingEvalHashTable_);
 
     const EvalT clampedEvalWhite =
             (EvalT)clamp((int)rawEvalWhite.value, -kMateEval + 1'000, kMateEval - 1'000);

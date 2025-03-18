@@ -255,7 +255,7 @@ StackVector<Move> GameState::generateMoves(
 
     const BitBoard anyOccupancy = getAnyOccupancy();
 
-    int pieceControlIdx = sideToMove_ == Side::White ? 0 : boardControl.blackControlStartIdx;
+    int pieceControlIdx = boardControl.getPieceControlStartIdx(sideToMove_);
 
     // Generate moves for normal pieces (non-pawns excl. king)
     for (int pieceIdx = 1; pieceIdx < kNumPieceTypes - 1; ++pieceIdx) {
@@ -422,7 +422,7 @@ StackVector<Move> GameState::generateMovesInCheck(
             capturesOnly,
             pawnBlockOrCaptureBitBoard);
 
-    int pieceControlIdx = sideToMove_ == Side::White ? 0 : boardControl.blackControlStartIdx;
+    int pieceControlIdx = boardControl.getPieceControlStartIdx(sideToMove_);
 
     // Generate moves for normal pieces (non-pawns excl. king)
     for (int pieceIdx = 1; pieceIdx < kNumPieceTypes - 1; ++pieceIdx) {

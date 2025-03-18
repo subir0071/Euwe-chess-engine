@@ -678,7 +678,7 @@ EvalT MoveSearcher::Impl::search(
 
     EvalT staticEval = -kInfiniteEval;
     if (futilityPruningEnabled || reverseFutilityPruningEnabled) {
-        staticEval = evaluator_.evaluate(gameState);
+        staticEval = evaluator_.evaluate(gameState, boardControl);
     }
     EvalT eval = staticEval;
 
@@ -989,7 +989,7 @@ EvalT MoveSearcher::Impl::quiesce(
     EvalT standPat;
     if (!isInCheck) {
         // Stand pat
-        standPat  = evaluator_.evaluate(gameState);
+        standPat  = evaluator_.evaluate(gameState, boardControl);
         bestScore = standPat;
         if (bestScore >= beta) {
             return bestScore;

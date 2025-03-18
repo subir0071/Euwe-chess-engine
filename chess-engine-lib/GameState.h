@@ -38,6 +38,10 @@ struct BoardControl {
     const BitBoard& getEnemyControl(const Side sideToMove) const {
         return sideControl[(int)nextSide(sideToMove)];
     }
+
+    int getPieceControlStartIdx(const Side side) const {
+        return side == Side::White ? 0 : blackControlStartIdx;
+    }
 };
 
 class GameState {
