@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "clang-cl");
+            UciFrontEnd uciFrontEnd(engine, "probe-depth-1");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

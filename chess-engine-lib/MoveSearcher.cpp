@@ -155,7 +155,7 @@ class MoveSearcher::Impl {
 
     std::uint8_t tTableTick_ = 0;
 
-    int syzygyMinProbeDepth_ = 3;
+    int syzygyMinProbeDepth_ = 1;
 
     SearchTTable tTable_ = {};
 
