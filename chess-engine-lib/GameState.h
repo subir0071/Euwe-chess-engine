@@ -26,7 +26,7 @@ using PieceBitBoards = std::array<std::array<BitBoard, kNumPieceTypes>, kNumSide
 
 struct BoardControl {
     std::array<BitBoard, kNumSides> sideControl;
-    std::array<std::array<BitBoard, kNumPieceTypes>, kNumSides> pieceTypeControl;
+    PieceBitBoards pieceTypeControl;
 
     // See: https://chess.stackexchange.com/questions/5343/maximum-number-of-non-pawn-pieces-on-the-board
     // 26 non-pawns, non-kings, so 28 total including kings.

@@ -11,12 +11,33 @@ namespace {
 
 // Killer and counter bonuses can potentially both apply.
 // Make sure that the combined bonus is less than the capture and promotion bonuses.
-constexpr int kCaptureBonus     = 40'000;
-constexpr int kPromotionBonus   = 40'000;
-constexpr int kKillerMoveBonus  = 20'000;
-constexpr int kCounterMoveBonus = 10'000;
+constexpr int kCaptureBonus     = 160'000;
+constexpr int kPromotionBonus   = 160'000;
+constexpr int kKillerMoveBonus  = 80'000;
+constexpr int kCounterMoveBonus = 40'000;
 
 constexpr int kMaxHistory = 4096;
+
+constexpr std::array<int, kNumPieceTypes> kEscapeThreatBonus = {
+        0,       // Pawn
+        4'000,   // Knight
+        4'000,   // Bishop
+        8'000,   // Rook
+        16'000,  // Queen
+        0,       // King
+};
+
+constexpr std::array<int, kNumPieceTypes> kEnterThreatPenalty = {
+        0,       // Pawn
+        0,       // Knight
+        0,       // Bishop
+        7'600,   // Rook
+        15'200,  // Queen
+        0,       // King
+};
+
+namespace checks {
+constexpr int kMaxControlBonus = 16'000;
 
 constexpr int kMinKillerCounterMoveScore = kKillerMoveBonus + kCounterMoveBonus - kMaxHistory;
 constexpr int kMaxKillerCounterMoveScore = kKillerMoveBonus + kCounterMoveBonus + kMaxHistory;
@@ -27,6 +48,8 @@ constexpr int kMaxKillerMoveScore = kKillerMoveBonus + kMaxHistory;
 constexpr int kMinCounterMoveScore = kCounterMoveBonus - kMaxHistory;
 constexpr int kMaxCounterMoveScore = kCounterMoveBonus + kMaxHistory;
 
+constexpr int kMaxRegularQuiet = kMaxHistory + kMaxControlBonus;
+
 static_assert(kMaxKillerCounterMoveScore < kCaptureBonus);
 static_assert(kMaxKillerCounterMoveScore < kPromotionBonus);
 
@@ -34,7 +57,8 @@ static_assert(kMaxKillerMoveScore < kMinKillerCounterMoveScore);
 
 static_assert(kMaxCounterMoveScore < kMinKillerMoveScore);
 
-static_assert(kMaxHistory < kMinCounterMoveScore);
+static_assert(kMaxRegularQuiet < kMinCounterMoveScore);
+}  // namespace checks
 
 [[nodiscard]] FORCE_INLINE MoveEvalT
 scoreQueenPromotion(const Move& move, const GameState& gameState) {
@@ -309,6 +333,7 @@ FORCE_INLINE MoveOrderer MoveScorer::getMoveOrderer(
         StackVector<Move>&& moves,
         const std::optional<Move>& moveToIgnore,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const Move& lastMove,
         const int ply) const {
     int moveIdx = 0;
@@ -316,7 +341,7 @@ FORCE_INLINE MoveOrderer MoveScorer::getMoveOrderer(
         ignoreMove(*moveToIgnore, moves, moveIdx, /*ignoredMoveShouldExist*/ true);
     }
 
-    auto moveScores = scoreMoves(moves, moveIdx, gameState, lastMove, ply);
+    auto moveScores = scoreMoves(moves, moveIdx, gameState, boardControl, lastMove, ply);
 
     return MoveOrderer(std::move(moves), std::move(moveScores), moveIdx);
 }
@@ -603,6 +628,7 @@ StackVector<MoveEvalT> MoveScorer::scoreMoves(
         const StackVector<Move>& moves,
         const int firstMoveIdx,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const Move& lastMove,
         const int ply) const {
     StackVector<MoveEvalT> scores = moveScoreStack_.makeStackVector();
@@ -610,6 +636,22 @@ StackVector<MoveEvalT> MoveScorer::scoreMoves(
     const auto& historyForSide = history_[(int)gameState.getSideToMove()];
     const auto& killerMoves    = getKillerMoves(ply);
     const Move counterMove     = getCounterMove(lastMove, gameState.getSideToMove());
+
+    const int enemySideIdx = (int)nextSide(gameState.getSideToMove());
+
+    std::array<BitBoard, kNumPieceTypes> controlToAvoid{};
+
+    const BitBoard& pawnControl = boardControl.pieceTypeControl[enemySideIdx][(int)Piece::Pawn];
+    controlToAvoid[(int)Piece::Knight] = pawnControl;
+    controlToAvoid[(int)Piece::Bishop] = pawnControl;
+
+    controlToAvoid[(int)Piece::Rook] =
+            pawnControl | boardControl.pieceTypeControl[enemySideIdx][(int)Piece::Knight]
+            | boardControl.pieceTypeControl[enemySideIdx][(int)Piece::Bishop];
+
+    controlToAvoid[(int)Piece::Queen] =
+            controlToAvoid[(int)Piece::Rook]
+            | boardControl.pieceTypeControl[enemySideIdx][(int)Piece::Rook];
 
     for (int i = 0; i < firstMoveIdx; ++i) {
         scores.push_back(0);
@@ -623,7 +665,18 @@ StackVector<MoveEvalT> MoveScorer::scoreMoves(
         if (isCapture(move)) {
             moveScore += scoreCapture(move, gameState);
         } else {
-            moveScore += historyForSide[(int)move.pieceToMove][(int)move.to];
+            const int pieceIdx = (int)move.pieceToMove;
+
+            moveScore += historyForSide[pieceIdx][(int)move.to];
+
+            const bool originUnderThreat      = controlToAvoid[pieceIdx] & move.from;
+            const bool destinationUnderThreat = controlToAvoid[pieceIdx] & move.to;
+
+            if (originUnderThreat && !destinationUnderThreat) {
+                moveScore += kEscapeThreatBonus[pieceIdx];
+            } else if (!originUnderThreat && destinationUnderThreat) {
+                moveScore -= kEnterThreatPenalty[pieceIdx];
+            }
         }
 
         // If promoting to a queen is not a good move, promoting to a knight, bishop, or rook is

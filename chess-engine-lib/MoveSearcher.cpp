@@ -855,8 +855,8 @@ EvalT MoveSearcher::Impl::search(
         return evaluateNoLegalMoves(gameState);
     }
 
-    auto moveOrderer =
-            moveScorer_.getMoveOrderer(std::move(moves), hashMove, gameState, lastMove, ply);
+    auto moveOrderer = moveScorer_.getMoveOrderer(
+            std::move(moves), hashMove, gameState, boardControl, lastMove, ply);
 
     while (const auto maybeMove = moveOrderer.getNextBestMove(gameState)) {
         const Move move = *maybeMove;

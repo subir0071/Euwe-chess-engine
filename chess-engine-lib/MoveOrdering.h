@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BoardConstants.h"
+#include "GameState.h"
 #include "Move.h"
 #include "StackOfVectors.h"
 
@@ -12,7 +13,6 @@
 using MoveEvalT = int;
 
 class Evaluator;
-class GameState;
 
 //#define TRACK_CUTOFF_STATISTICS
 
@@ -89,6 +89,7 @@ class MoveScorer {
             StackVector<Move>&& moves,
             const std::optional<Move>& moveToIgnore,
             const GameState& gameState,
+            const BoardControl& boardControl,
             const Move& lastMove,
             int ply) const;
 
@@ -157,6 +158,7 @@ class MoveScorer {
             const StackVector<Move>& moves,
             const int firstMoveIdx,
             const GameState& gameState,
+            const BoardControl& boardControl,
             const Move& lastMove,
             int ply) const;
 
