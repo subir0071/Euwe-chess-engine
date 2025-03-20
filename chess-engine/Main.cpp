@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "control-ordering");
+            UciFrontEnd uciFrontEnd(engine, "minor-threat-penalty");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

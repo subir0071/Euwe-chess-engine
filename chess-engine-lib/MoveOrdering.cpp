@@ -29,8 +29,8 @@ constexpr std::array<int, kNumPieceTypes> kEscapeThreatBonus = {
 
 constexpr std::array<int, kNumPieceTypes> kEnterThreatPenalty = {
         0,       // Pawn
-        0,       // Knight
-        0,       // Bishop
+        3'800,   // Knight
+        3'800,   // Bishop
         7'600,   // Rook
         15'200,  // Queen
         0,       // King
