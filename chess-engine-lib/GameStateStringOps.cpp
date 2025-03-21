@@ -299,6 +299,10 @@ HashT computePawnKingHash(const GameState& gameState) {
         }
     }
 
+    if (gameState.getSideToMove() == Side::Black) {
+        updateHashForSideToMove(hash);
+    }
+
     return hash;
 }
 
