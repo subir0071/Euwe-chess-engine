@@ -116,7 +116,7 @@ class MoveScorer {
     using CounterMovePerPiece = std::array<MovePerSquare, kNumPieceTypes>;
     using CounterMovePerSide  = std::array<CounterMovePerPiece, kNumSides>;
 
-    using HistoryValueT         = int;
+    using HistoryValueT         = std::int16_t;
     using HistoryPerSquare      = std::array<HistoryValueT, kSquares>;
     using HistoryPieceTo        = std::array<HistoryPerSquare, kNumPieceTypes>;
     using HistoryPieceToPerSide = std::array<HistoryPieceTo, kNumSides>;

@@ -554,7 +554,7 @@ FORCE_INLINE void MoveScorer::updateCaptureHistory(
 FORCE_INLINE void MoveScorer::updateHistory(HistoryValueT& history, const HistoryValueT update) {
     // History with 'gravity'.
 
-    const HistoryValueT clampedUpdate = clamp(update, -kMaxHistory, kMaxHistory);
+    const HistoryValueT clampedUpdate = clamp<HistoryValueT>(update, -kMaxHistory, kMaxHistory);
 
     history += clampedUpdate - history * constexprAbs(clampedUpdate) / kMaxHistory;
 

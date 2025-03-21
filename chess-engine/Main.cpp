@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "minor-threat-penalty");
+            UciFrontEnd uciFrontEnd(engine, "int16_t-history");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
