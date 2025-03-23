@@ -593,13 +593,14 @@ FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
         const int reducedDepth,
         const int movesSearched,
         const Move& move,
-        const bool moveIsLosing,
+        const bool isLosingTactical,
         const GameState& gameState,
         const std::optional<BitBoard> enemyPinBitBoard,
         std::optional<GameState::DirectCheckBitBoards>& directCheckBitBoards) {
     const bool isTactical = isCaptureOrQueenPromo(move);
+    MY_ASSERT(IMPLIES(isLosingTactical, isTactical));
 
-    if (isTactical && !moveIsLosing) {
+    if (isTactical && !isLosingTactical) {
         // Don't futility prune winning tactical moves.
         return kMateEval;
     }
@@ -613,24 +614,30 @@ FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
     const int seeThreshold = alpha - (eval + futilityMargin);
 
     EvalT futilityValue;
-    if (seeThreshold >= MoveOrderer::kCaptureLosingThreshold && moveIsLosing) {
+    if (seeThreshold >= MoveOrderer::kCaptureLosingThreshold && isLosingTactical) {
         // We know the move is losing, so no need to check whether SEE is above the losing
         // threshold.
         // Note that in this case, alpha >= eval + futilityMargin + kCaptureLosingThreshold.
         // So: futilityValue <= alpha.
         futilityValue = eval + futilityMargin + MoveOrderer::kCaptureLosingThreshold;
+    } else if (seeThreshold >= 0 && !isCapture(move) && !isPromotion(move)) {
+        // Since the move is not a capture or promotion, its SEE is at best 0. So this move cannot
+        // exceed the SEE threshold, meaning futilityValue <= alpha.
+        futilityValue = eval + futilityMargin;
     } else {
         // staticExchangeEvaluationBound checks if SEE >= seeThreshold, but we want to know if
         // SEE > seeThreshold. This is equivalent to checking if SEE >= seeThreshold + 1.
         const int seeBound = staticExchangeEvaluationBound(gameState, move, seeThreshold + 1);
 
         futilityValue = eval + futilityMargin + seeBound;
+
+        if (futilityValue > alpha) {
+            // Early exit to avoid check calculations.
+            return futilityValue;
+        }
     }
 
-    if (futilityValue > alpha) {
-        // Early exit to avoid check calculations.
-        return futilityValue;
-    }
+    MY_ASSERT(futilityValue <= alpha);
 
     if (!directCheckBitBoards) {
         directCheckBitBoards = gameState.getDirectCheckBitBoards();
