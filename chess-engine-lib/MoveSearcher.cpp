@@ -587,25 +587,21 @@ FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
 
     const EvalT futilityMargin = calculateFutilityMargin(reducedDepth, movesSearched, isTactical);
 
+    const int seeThreshold = alpha - (eval + futilityMargin);
+
     EvalT futilityValue;
-    if (isTactical) {
-        const int seeThreshold = alpha - (eval + futilityMargin);
-
-        if (seeThreshold >= MoveOrderer::kCaptureLosingThreshold) {
-            // We know the move is losing, so no need to check whether SEE is above the losing
-            // threshold.
-            // Note that in this case, alpha >= eval + futilityMargin + kCaptureLosingThreshold.
-            // So: futilityValue <= alpha.
-            futilityValue = eval + futilityMargin + MoveOrderer::kCaptureLosingThreshold;
-        } else {
-            // staticExchangeEvaluationBound checks if SEE >= seeThreshold, but we want to know if
-            // SEE > seeThreshold. This is equivalent to checking if SEE >= seeThreshold + 1.
-            const int seeBound = staticExchangeEvaluationBound(gameState, move, seeThreshold + 1);
-
-            futilityValue = eval + futilityMargin + seeBound;
-        }
+    if (seeThreshold >= MoveOrderer::kCaptureLosingThreshold && moveIsLosing) {
+        // We know the move is losing, so no need to check whether SEE is above the losing
+        // threshold.
+        // Note that in this case, alpha >= eval + futilityMargin + kCaptureLosingThreshold.
+        // So: futilityValue <= alpha.
+        futilityValue = eval + futilityMargin + MoveOrderer::kCaptureLosingThreshold;
     } else {
-        futilityValue = eval + futilityMargin;
+        // staticExchangeEvaluationBound checks if SEE >= seeThreshold, but we want to know if
+        // SEE > seeThreshold. This is equivalent to checking if SEE >= seeThreshold + 1.
+        const int seeBound = staticExchangeEvaluationBound(gameState, move, seeThreshold + 1);
+
+        futilityValue = eval + futilityMargin + seeBound;
     }
 
     if (futilityValue > alpha) {

@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "int16_t-history");
+            UciFrontEnd uciFrontEnd(engine, "quiet-see-futility");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {
