@@ -22,7 +22,7 @@ int main() {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "quiet-see-futility");
+            UciFrontEnd uciFrontEnd(engine, "log-lmr");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

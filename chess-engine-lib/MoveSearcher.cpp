@@ -216,9 +216,23 @@ namespace {
     return 0;
 }
 
+const auto lmrReductionTable = []() {
+    std::array<std::array<int, 64>, 100> table = {};
+
+    for (int depthIdx = 0; depthIdx < table.size(); ++depthIdx) {
+        const int depth = depthIdx + 1;
+        for (int movesSearched = 0; movesSearched < table[0].size(); ++movesSearched) {
+            table[depthIdx][movesSearched] =
+                    (int)max(0., 0.5 + std::log(depth) * std::log(movesSearched) / 3);
+        }
+    }
+
+    return table;
+}();
+
 [[nodiscard]] FORCE_INLINE int getDepthReduction(
         const Move& move,
-        const int moveIdx,
+        const int movesSearched,
         const bool moveIsLosing,
         const bool isPvNode,
         const int depth,
@@ -239,18 +253,27 @@ namespace {
         return 0;
     }
 
+    const bool isTactical = isCaptureOrQueenPromo(move);
+
     if (!moveIsLosing) {
         // Don't apply reductions to tactical moves with positive SEE.
-        const Piece promotionPiece = getPromotionPiece(move);
-        if (isCapture(move) || promotionPiece == Piece::Queen) {
+        if (isTactical) {
             return 0;
         }
     }
 
     // Late Move Reduction (LMR)
     static constexpr int kMovesForLmr = 4;
-    if (moveIdx >= kMovesForLmr) {
-        return 1;
+    if (movesSearched >= kMovesForLmr) {
+        if (isTactical) {
+            return 1;
+        }
+
+        const int depthIdx         = min(depth - 1, (int)lmrReductionTable.size() - 1);
+        const int movesSearchedIdx = min(movesSearched, (int)lmrReductionTable[0].size() - 1);
+        const int lmrFromTable     = lmrReductionTable[depthIdx][movesSearchedIdx];
+
+        return min(lmrFromTable, depth - 1);
     }
 
     return 0;
