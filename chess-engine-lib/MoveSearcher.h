@@ -9,9 +9,10 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
 struct RootSearchResult {
-    StackVector<Move> principalVariation;
+    std::vector<Move> principalVariation;
     EvalT eval;
     bool wasInterrupted = false;
 };

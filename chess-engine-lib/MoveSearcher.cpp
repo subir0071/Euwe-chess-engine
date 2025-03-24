@@ -76,7 +76,7 @@ class MoveSearcher::Impl {
     void storeNullMoveScoreInTTable(const EvalT value, int depth, HashT hash);
 
     // Extract the principal variation from the transposition table.
-    [[nodiscard]] StackVector<Move> extractPv(
+    [[nodiscard]] std::vector<Move> extractPv(
             GameState gameState, StackOfVectors<Move>& stack, int depth);
 
     [[nodiscard]] bool shouldStopSearch() const;
@@ -526,11 +526,12 @@ FORCE_INLINE void MoveSearcher::Impl::storeNullMoveScoreInTTable(
     tTable_.store(entry, isTTEntryMoreValuable);
 }
 
-StackVector<Move> MoveSearcher::Impl::extractPv(
+std::vector<Move> MoveSearcher::Impl::extractPv(
         GameState gameState, StackOfVectors<Move>& stack, const int depth) {
     const int maxPvLength = max(depth, searchStatistics_.selectiveDepth);
 
-    StackVector<Move> pv = stack.makeStackVector();
+    std::vector<Move> pv;
+    pv.reserve(maxPvLength);
 
     while (pv.size() < maxPvLength) {
         const auto ttHit = tTable_.probe(gameState.getBoardHash());
@@ -552,7 +553,6 @@ StackVector<Move> MoveSearcher::Impl::extractPv(
         }
     }
 
-    pv.lock();
     return pv;
 }
 
@@ -1411,9 +1411,7 @@ RootSearchResult MoveSearcher::Impl::aspirationWindowSearch(
                     frontEnd_->reportDiscardedPv("partial aspiration search with failed low");
                 }
 
-                StackVector<Move> principalVariation = stack.makeStackVector();
-                principalVariation.lock();
-                return {.principalVariation = std::move(principalVariation),
+                return {.principalVariation = {},
                         .eval               = lastCompletedEval,
                         .wasInterrupted     = true};
             }

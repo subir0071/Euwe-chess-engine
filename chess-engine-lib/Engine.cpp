@@ -152,14 +152,14 @@ SearchInfo Engine::Impl::findMove(
     }
 
     for (; depth <= maxDepth; ++depth) {
-        const auto searchResult =
+        // Not const to enable std::move of the PV.
+        auto searchResult =
                 moveSearcher_.searchForBestMove(copyState, depth, moveStack_, evalGuess);
 
         evalGuess = searchResult.eval;
 
         if (searchResult.principalVariation.size() > 0) {
-            searchInfo.principalVariation = std::vector<Move>(
-                    searchResult.principalVariation.begin(), searchResult.principalVariation.end());
+            searchInfo.principalVariation = std::move(searchResult.principalVariation);
         }
 
         const auto searchStatistics = moveSearcher_.getSearchStatistics();
