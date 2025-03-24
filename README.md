@@ -15,6 +15,27 @@ Euwe uses BMI2 instructions for bitboard manipulation. This means that it requir
 supports these instructions. This includes Intel CPUs since about 2013 (Haswell) and AMD CPUs since
 about 2017 (Zen). Though note that AMD CPUs prior to Zen 3 (2020) may experience performance issues.
 
+## Options
+
+Euwe supports the following UCI options:
+
+ - `Hash`: The size of the transposition table in MB. Default is 16 MB.
+ - `move_overhead_ms`: The overhead in milliseconds for each move. This is subtracted from the time
+   budget for each move. Default is 20 ms. Some GUIs or match managers may have additional overhead
+   that requires increasing this value. If  you experience timeouts, try increasing this value.
+ - `SyzygyPath`: Path(s) to the Syzygy tablebases. On Windows, this must be a semicolon-separated
+   list of directories. On Linux, this must be a colon-separated list of directories. The files in
+   each directory will be searched for TB files, but subdirectories will not be searched. The
+   default is an empty string, which disables TB probing. In order for DTZ tables to be used (for
+   root move filtering), WDL tables must also be present. It is not possible to provide only DTZ
+   tables.
+ - `SyzygyProbeDepth`: Minimum depth to probe the WDL tablebases at a node in the search. The
+   default is 1, meaning that the TBs are probed at all non-quiescence nodes. Increasing this value
+   will reduce the number of TB probes. This can improve performance, but will reduce the accuracy
+   of the search. If the TBs are stored on an HDD, it is recommended to set this value to 100 to
+   completely disable probing during search. Note that regardless of the probe depth setting, the
+   engine will still use DTZ tables for root move filtering (if available).
+
 ## Features
 
 ### Board representation
@@ -70,6 +91,9 @@ Features considered by the evaluation function include:
          - A rook versus a minor.
          - A rook and a minor vs a rook.
 
+Additionally, Euwe caches the evaluation of the pawn-king structure. Since this tends to be fairly
+static, this provides a speed-up during search.
+
 ### Search function
 
 Euwe uses [principal variation search](https://www.chessprogramming.org/Principal_Variation_Search)
@@ -83,28 +107,34 @@ with the following enhancements and heuristics.
  - Aspiration windows
  - Move ordering:
     - Hash move
-    - Capture ordering based on MVV/LVA
+    - Capture ordering based on MVV, capture history, and Static Exchange Evaluation (SEE)
     - Killer moves
     - Counter moves
     - History heuristic
+    - Threats by less valuable pieces
  - Pruning:
     - Null move pruning
     - Delta pruning
     - Futility pruning
- - Selectivity:
-    - Late move reduction
+    - Late move pruning: the futility margin is reduced based on the move index (causing later moves
+      to be pruned more aggressively), and once enough quiet moves are pruned, all remaining quiet
+      moves are skipped.
+    - Reverse futility pruning
+ - Extensions and reductions:
+    - Late move reductions
     - Check extensions
+    - 7th rank extensions: extend pawn pushes to rank 2 and 7
 
 ### Time management
 
-Euwe uses a primitive time management system that tries to distribute the available time equally over
-each move.
+Euwe uses a basic time management system that tries to distribute the available time equally over
+each move. It uses a 'soft' and 'hard' time limit. The 'soft' time limit is checked each time the
+depth is increased, and the 'hard' time limit will interrupt the search.
 
 ### Unsupported UCI features
 
 Currently the following UCI features are not supported:
 
- - Restricting the moves to be searched to a subset of the legal moves (`go searchmoves`).
  - Pondering (`go ponder` and `ponderhit`).
  - Searching for a mate in a given number of moves (`go mate`).
  - All of the standardized UCI options except for `Hash`. Specifically, the following options are not
@@ -129,7 +159,9 @@ e.g., [here](https://gist.github.com/DOBRO/2592c6dad754ba67e6dcaec8c90165bf) for
 interface. To aid with playing, you can enable printing of the board after each move by enabling
 debug mode. To do this, send the command `debug on`.
 
-**NOTE:** to minimize resources on startup, Euwe allocates only a small a transposition table on
+For statistical tests, consider using [Fastchess](https://github.com/Disservin/fastchess).
+
+**NOTE:** to minimize resources on startup, Euwe allocates only a small transposition table on
 start-up. This significantly reduces its playing strength. It is strongly recommended to set the
 UCI option 'Hash' to an appopriate value. For example, to use a transposition table of size 512 MB,
 run the command `setoption name Hash value 512` (or configure this through a chess GUI).
@@ -179,6 +211,100 @@ because the Tuner uses Ceres configured with SuiteSparse, which in turn depends 
 written in Fortran.
 
 ## Release history
+
+### Version 2.1
+
+Version 2.1 has a significantly improved search function, and now supports Syzygy tablebases.
+
+Approximate strength gain (measured in self-play against v2.0 using an unbalanced opening book):
+
+ - On ultra fast time control, with 6-men Syzygy TBs (3"+0.1"): 288.1 +/- 15.6 Elo
+ - On ultra fast time control, without Syzygy TBs (3"+0.1"): 279.5 +/- 15.4 Elo
+ - On CCRL Blitz time control, with 6-men Syzygy TBs (2'+1"): 290.7 +/- 28.0 Elo
+
+Note that providing Syzygy TBs provides a strength gain of about 20 Elo (measured in self-play on
+ultra fast time control). The difference in strength gain compared to v2.0 is less than that because
+v2.1 is so much stronger that the game is typically already decided before the TBs come into play.
+
+Also note that the strength gain from TBs depends on the hardware used to run the engine. In
+particular, when the TBs are stored on an HDD it is recommended to disable probing within the search
+by setting `SyzygyProbeDepth` to 100. The engine will then only use the TBs for filtering moves when
+it has already reached a TB position. This results in a reduced strength gain compared to probing
+within the search on an SSD.
+
+Changes to the UCI interface:
+
+ - Added support for the `go searchmoves` subcommand. This allows the user to restrict the moves to
+   be searched to a subset of the legal moves.
+ - The engine now provides `lowerbound` and `upperbound` information when a search fails the
+   aspiration window.
+ - The order of information within the `info` output was changed.
+ - Added the `SyzygyPath` and `SyzygProbeDepth` options to configure the use of Syzygy tablebases.
+ - The `move_overhead_ms` default value was reduced to 20 (from 100).
+ - The maximum length of the provided PV is now the greater of depth and seldepth.
+ - The PV will now terminate upon the first repetition and upon reaching a draw by the 50-move rule.
+   Previously, the PV could continue beyond this point, resulting in PVs containing moves beyond the
+   end of the game.
+ - When starting a search from a position for which the transposition table already has an exact
+   score at a certain depth, the engine will now immediately report this depth, instead of starting
+   from depth 1 and very rapidly increasing it.
+ - Some debug prints (to stderr) were changed to UCI information (`info string`) prints. Some other
+   debug prints were removed.
+
+Bugfixes:
+
+ - The `nodes` and `nps` statistics are now correctly reported. Previously, nodes on the transition
+   between regular search and quiescence search would be counted double, resulting in inflated node
+   and nps counts.
+ - The `quit` command now interrupts the search. Previously, the engine would hang if `quit` was
+   sent during a search without first sending `stop`.
+ - The `stop` command should now be more reliable. Previously, if `stop` was sent immediately after
+   `go`, the engine would sometimes not stop the search.
+ - Fix an infinite loop (hang) that would occur if `stdin` is unexpectedly closed.
+
+New or improved features:
+
+ - Changes to search:
+    - Improved move ordering:
+       - Use history with gravity instead of relative history.
+       - Use MVV + capture history instead of MVV/LVA for ordering captures.
+       - Use Static Exchange Evaluation (SEE) for detecting losing captures, and search those later.
+       - Give bonuses and maluses for moves that escape or enter a capture threat to the moved piece
+         by a less valuable piece.
+    - Increased selectvitity:
+       - Added reverse futility pruning.
+       - Allow futility pruning to happen up to depth 5 (up from 3).
+       - Reduce the futility margin based on the move index, meaning that more aggressive futility
+         pruning is applied to later moves. This is essentially a hybrid between futility pruning
+         and late move pruning.
+       - Allow losing captures (based on SEE) to be subject to futility pruning.
+       - Allow losing captures to be subject to late move reductions.
+       - Use SEE on both quiet moves and losing captures to determine if they lose sufficient
+         material to be subject to futility pruning. This causes more moves to be pruned.
+       - If enough quiet moves are pruned using futility pruning, skip all remaining quiet moves.
+       - Scale the depth reduction in late move reductions based on depth and the move index.
+    - Use Syzygy tablebases:
+       - Probe WDL tables in the search. This makes search in late-game positions more accurate.
+       - When the current position is a TB position, the engine will only consider moves that retain
+         the same TB verdict. This guarantees perfect play in TB positions. If there is more than
+         one such move, the engine will still perform a search to find the move that seems best
+         based on normal search/evaluation. This allows finding a faster / more natural mate path in
+         won positions, and attempts to create a tricky position in which the opponent might make a
+         mistake in drawn and lost positions.
+ - Changes to time management:
+    - The engine now uses a 'soft' and 'hard' time limit. The 'soft' time limit is checked each time
+      the depth is increased, and the 'hard' time limit will interrupt the search.
+ - Changes to evaluation:
+    - The evaluation function now caches the evaluation of the pawn-king structure, providing a
+      speed-up.
+
+Technical changes:
+
+ - Build configuration was moved from CMakeUserPresets.json to CMakePresets.json.
+ - Build configurations were added for clang-cl (on Windows) and clang (on Linux).
+ - The binaries provided for download are now built with clang-cl on Windows and clang on Linux,
+   compared to MSVC on Windows and g++ on Linux in previous versions. This has resulted in improved
+   performance on both platforms.
 
 ### Version 2.0
 
@@ -235,6 +361,9 @@ It also includes several minor improvements:
 
 The author would like to thank:
 
+ - The folks running [CCRL](https://computerchess.org.uk/ccrl/4040/), including Graham Banks and
+   Gabor Szots, for providing a valuable platform for testing and comparing chess engines, as well
+   as for gathering a fun community of chess engine enthusiasts.
  - The [Chess Programming Wiki](https://www.chessprogramming.org/Main_Page),
    [TalkChess](http://talkchess.com/), and the many other freely available resources on chess
    programming.
@@ -244,7 +373,10 @@ The author would like to thank:
  - [lichess](https://lichess.org/) for providing an
    [API](https://github.com/lichess-bot-devs/lichess-bot) and platform for chess engines to play
    online.
- - [Cute Chess](https://github.com/cutechess/cutechess) for providing a valuable testing platform.
+ - [Fastchess](https://github.com/Disservin/fastchess) and
+   [Cute Chess](https://github.com/cutechess/cutechess) for providing valuable testing tools.
+ - Stefan Pohl for providing unbalanced opening books for testing. See his website
+   [here](https://www.sp-cc.de/anti-draw-openings.htm) and [here](https://www.sp-cc.de/uho_2024.htm).
  - Microsoft for providing valuable free development tools: Visual Studio Community Edition, GitHub,
    and GitHub Copilot.
  - The LLVM development group for providing valuable free and open source development tools: clang,
@@ -254,7 +386,17 @@ The author would like to thank:
    [SuiteSparse](https://github.com/DrTimothyAldenDavis/SuiteSparse),
    [GTest](https://github.com/google/googletest), and
    [python-chess](https://python-chess.readthedocs.io/en/latest/).
+ - Ronald de Man (aka 'Syzygy') for providing the code for Syzygy generation and probing, and 
+   [basil00](https://github.com/basil00), [John Dart](https://github.com/jdart1) and
+   [Andrew Grant](https://github.com/AndyGrant) for further developing the probing code in the form
+   of [Fathom](https://github.com/jdart1/Fathom) and [Pyrrhic](https://github.com/AndyGrant/Pyrrhic).
+ - The [Stockfish](https://github.com/official-stockfish/Stockfish) team for providing a valuable
+   reference implementation of a chess engine.
 
 ## License
 
 Euwe is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
+
+Euwe utilizes [Pyrrhic](https://github.com/AndyGrant/Pyrrhic) for Syzygy tablebase probing. Pyrrhic
+is licensed under the MIT license, see the [Pyrrhic license](chess-engine-lib/Pyrrhic/LICENSE) fo
+details.
