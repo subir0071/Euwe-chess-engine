@@ -26,7 +26,7 @@ constexpr int kInterruptCheckInterval = 32;
 
 }  // namespace
 
-TimeManager::TimeManager() : moveOverhead_(std::chrono::milliseconds(100)) {}
+TimeManager::TimeManager() : moveOverhead_(std::chrono::milliseconds(20)) {}
 
 void TimeManager::setFrontEnd(IFrontEnd* frontEnd) {
     frontEnd_ = frontEnd;
