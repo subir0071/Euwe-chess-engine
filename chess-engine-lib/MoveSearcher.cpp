@@ -263,20 +263,15 @@ const auto lmrReductionTable = []() {
     }
 
     // Late Move Reduction (LMR)
-    static constexpr int kMovesForLmr = 4;
-    if (movesSearched >= kMovesForLmr) {
-        if (isTactical) {
-            return 1;
-        }
-
-        const int depthIdx         = min(depth - 1, (int)lmrReductionTable.size() - 1);
-        const int movesSearchedIdx = min(movesSearched, (int)lmrReductionTable[0].size() - 1);
-        const int lmrFromTable     = lmrReductionTable[depthIdx][movesSearchedIdx];
-
-        return min(lmrFromTable, depth - 1);
+    if (isTactical) {
+        return 1;
     }
 
-    return 0;
+    const int depthIdx         = min(depth - 1, (int)lmrReductionTable.size() - 1);
+    const int movesSearchedIdx = min(movesSearched, (int)lmrReductionTable[0].size() - 1);
+    const int lmrFromTable     = lmrReductionTable[depthIdx][movesSearchedIdx];
+
+    return min(lmrFromTable, depth - 1);
 }
 
 FORCE_INLINE void updateMateDistance(EvalT& score) {
