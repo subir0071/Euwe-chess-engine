@@ -85,7 +85,7 @@ class MoveSearcher::Impl {
 
     [[nodiscard]] bool captureWillProbeSyzygy(const GameState& gameState, int depth) const;
 
-    [[nodiscard]] EvalT getMoveFutilityValue(
+    [[nodiscard]] std::pair<EvalT, bool> getMoveFutilityValue(
             const EvalT eval,
             const EvalT alpha,
             const int reducedDepth,
@@ -582,7 +582,7 @@ FORCE_INLINE bool MoveSearcher::Impl::captureWillProbeSyzygy(
                    gameState.getNumPieces() - 1);
 }
 
-FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
+FORCE_INLINE std::pair<EvalT, bool> MoveSearcher::Impl::getMoveFutilityValue(
         const EvalT eval,
         const EvalT alpha,
         const int reducedDepth,
@@ -597,11 +597,11 @@ FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
 
     if (isTactical && !isLosingTactical) {
         // Don't futility prune winning tactical moves.
-        return kMateEval;
+        return {kMateEval, false};
     }
     if (isCapture(move) && captureWillProbeSyzygy(gameState, reducedDepth)) {
         // We will get a fast and accurate value from syzygy probe, so no point pruning this move.
-        return kMateEval;
+        return {kMateEval, false};
     }
 
     const EvalT futilityMargin = calculateFutilityMargin(reducedDepth, movesSearched, isTactical);
@@ -628,7 +628,7 @@ FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
 
         if (futilityValue > alpha) {
             // Early exit to avoid check calculations.
-            return futilityValue;
+            return {futilityValue, false};
         }
     }
 
@@ -640,10 +640,12 @@ FORCE_INLINE EvalT MoveSearcher::Impl::getMoveFutilityValue(
 
     if (gameState.givesCheck(move, *directCheckBitBoards, enemyPinBitBoard)) {
         // Don't futility prune moves that give check.
-        return kMateEval;
+        return {kMateEval, false};
     }
 
-    return futilityValue;
+    const bool voteToSkipQuiets = !isTactical && seeThreshold >= 0;
+
+    return {futilityValue, voteToSkipQuiets};
 }
 
 EvalT MoveSearcher::Impl::search(
@@ -879,6 +881,8 @@ EvalT MoveSearcher::Impl::search(
     auto moveOrderer = moveScorer_.getMoveOrderer(
             std::move(moves), hashMove, gameState, boardControl, lastMove, ply);
 
+    int votesToSkipQuiets = 0;
+
     while (const auto maybeMove = moveOrderer.getNextBestMove(gameState)) {
         const Move move = *maybeMove;
 
@@ -887,7 +891,7 @@ EvalT MoveSearcher::Impl::search(
 
         // Futility pruning
         if (futilityPruningEnabled) {
-            const EvalT futilityValue = getMoveFutilityValue(
+            const auto [futilityValue, voteToSkip] = getMoveFutilityValue(
                     eval,
                     alpha,
                     depth - reduction,
@@ -903,6 +907,16 @@ EvalT MoveSearcher::Impl::search(
                     bestScore = futilityValue;
                     bestMove  = move;
                 }
+
+                if (voteToSkip) {
+                    ++votesToSkipQuiets;
+
+                    static constexpr int kVotesToSkipQuietsThreshold = 5;
+                    if (votesToSkipQuiets >= kVotesToSkipQuietsThreshold) {
+                        moveOrderer.skipRemainingQuiets();
+                    }
+                }
+
                 continue;
             }
         }

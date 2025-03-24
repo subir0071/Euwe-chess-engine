@@ -230,6 +230,12 @@ FORCE_INLINE MoveType MoveOrderer::getLastMoveType() const {
     return lastMoveType_;
 }
 
+FORCE_INLINE void MoveOrderer::skipRemainingQuiets() {
+    MY_ASSERT(state_ == State::Quiets);
+    state_          = State::LosingCaptures;
+    currentMoveIdx_ = firstLosingCaptureIdx_;
+}
+
 FORCE_INLINE int MoveOrderer::findHighestScoringMove(const int startIdx, const int endIdx) const {
     // Select best move based on pre-calculated scores using a simple linear search.
     // If the best move is then swapped to the front, repeated calls of this function end up doing
