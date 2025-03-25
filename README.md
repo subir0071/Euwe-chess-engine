@@ -1,6 +1,8 @@
 Euwe Chess Engine
 =================
 
+[![Euwe-chess-engine](https://github.com/JoostHouben/Euwe-chess-engine/actions/workflows/cmake-multi-platform.yml/badge.svg?branch=main)](https://github.com/JoostHouben/Euwe-chess-engine/actions/workflows/cmake-multi-platform.yml)
+
 **Author: Joost Houben**
 
 Euwe is a UCI chess engine written in modern C++. It is named after
