@@ -186,19 +186,19 @@ These dependencies are managed using [vcpkg](https://vcpkg.io/en/) (for C++) and
 
 #### Windows
 
- - Open the root directory of the repository in Visual Studio 2022.
- - [Set up vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-cmd)
-   and in CMakePresets.json, set CMAKE_TOOLCHAIN_FILE to point to the vcpkg.cmake file, and
-   VCPKG_ROOT to point the vcpkg root directory.
- - Build the solution. For best playing strength, build in Release mode.
+ - Open the root directory of the repository in Visual Studio 2022. Make sure that you have the 
+   'Desktop development with C++' workload installed, including at least 'C++ CMake tools for
+   Windows' and 'vcpkg package manager'. If you want to build with clang-cl (for best performance),
+   you'll also need the 'C++ clang compiler for windows' component.
+ - Build the solution. For best playing strength, build using the mode 'Windows clang x64 Release'.
 
 The project has been tested with Visual Studio 2022 Community Edition, version 17.13 (`_MSC_VER` 1943).
 
 #### Linux
 
  - [Set up vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-cmd)
-   and in CMakePresets.json, set CMAKE_TOOLCHAIN_FILE to point to the vcpkg.cmake file, and
-   VCPKG_ROOT to point the vcpkg root directory.
+   and make sure that the `VCPKG_ROOT` environment variable is set (or modify the CMakePresets.json
+   file to point to your VCPKG installation directly).
  - If needed, modify CMakePresets.json to match your build environment.
  - Run `cmake` with appropriate options. E.g., run `cmake --preset linux-x64-release` to build in
    release mode.
