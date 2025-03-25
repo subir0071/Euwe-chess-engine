@@ -61,8 +61,28 @@ jobs:
         --preset ${{ steps.strings.outputs.os-name }}-${{ matrix.config_name }}
 
     - name: Build
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
+      run: >
+        cmake --build ${{ steps.strings.outputs.build-output-dir }}
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: tests/tests
+
+    - name: Prepare artifact directory
+      if: matrix.config_name == 'clang-x64-release' && github.ref == 'refs/heads/main'
+      working-directory: .
+      run: |
+        mkdir artifacts
+        cp ${{ steps.strings.outputs.build-output-dir }}/chess-engine/Euwe* artifacts
+        cp LICENSE artifacts
+        cp NOTICE artifacts
+
+    - name: Archive binary
+      if: matrix.config_name == 'clang-x64-release' && github.ref == 'refs/heads/main'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: Euwe-dev.${{ steps.strings.outputs.os-name }}
+        path: |
+          artifacts/LICENSE
+          artifacts/NOTICE
+          artifacts/Euwe*

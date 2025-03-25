@@ -9,6 +9,16 @@ FIDE president, and the fifth World Chess Champion.
 
 You can play against it online on [lichess](https://lichess.org/@/Euwe-chess-engine).
 
+## Downloads
+
+The latest stable release can be downloaded from the
+[releases page](https://github.com/JoostHouben/Euwe-chess-engine/releases/latest).
+
+You can also download pre-release builds from the CI artifacts
+[here](https://github.com/JoostHouben/Euwe-chess-engine/actions?query=is%3Asuccess+event%3Apush+branch%3Amain).
+
+If you prefer to build the engine yourself, see the build instructions [below](#Build-instructions).
+
 ## Hardware requirements
 
 Euwe uses BMI2 instructions for bitboard manipulation. This means that it requires a CPU that
