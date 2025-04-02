@@ -1,6 +1,7 @@
 #include "FrontEndOption.h"
 
 #include "MyAssert.h"
+#include "RangePatches.h"
 
 #include <charconv>
 #include <format>
@@ -142,9 +143,7 @@ FrontEndOption FrontEndOption::createAlternative(
                      validValues = *option.validValues_](std::string_view valueString) {
         const auto it = std::find(validValues.begin(), validValues.end(), valueString);
         if (it == validValues.end()) {
-            const std::string validValuesString = validValues
-                                                | std::views::join_with(std::string(", "))
-                                                | std::ranges::to<std::string>();
+            const std::string validValuesString = validValues | joinToString(", ");
             throw std::invalid_argument(std::format(
                     "Invalid value '{}'. Expected one of: [{}]", valueString, validValuesString));
         }

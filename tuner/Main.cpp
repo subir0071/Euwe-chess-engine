@@ -8,6 +8,7 @@
 #include "chess-engine-lib/Eval.h"
 #include "chess-engine-lib/GameState.h"
 #include "chess-engine-lib/Math.h"
+#include "chess-engine-lib/RangePatches.h"
 
 #include <filesystem>
 #include <format>
@@ -31,7 +32,7 @@ std::array<double, kNumEvalParams> getInitialParams() {
 
 std::string getParamsString(const std::array<double, kNumEvalParams>& paramsDouble) {
     return paramsDouble | std::ranges::views::transform([](double d) { return std::to_string(d); })
-         | std::ranges::views::join_with(std::string(", ")) | std::ranges::to<std::string>();
+         | joinToString(", ");
 }
 
 std::array<double, kNumPieceTypes - 1> getAveragePieceValues(

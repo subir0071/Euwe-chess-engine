@@ -5,6 +5,7 @@
 #include "GameState.h"
 #include "Math.h"
 #include "MyAssert.h"
+#include "RangePatches.h"
 
 #include <future>
 #include <iostream>
@@ -20,8 +21,7 @@
 namespace {
 
 std::string moveListToString(const std::vector<Move>& moves) {
-    return moves | std::views::transform(&Move::toUci) | std::views::join_with(' ')
-         | std::ranges::to<std::string>();
+    return moves | std::views::transform(&Move::toUci) | joinToString(" ");
 }
 
 std::string scoreToString(const EvalT score) {
@@ -44,7 +44,7 @@ struct OptionStringParseResult {
 
 std::string stringToLower(std::string_view str) {
     return str | std::views::transform([](unsigned char c) { return std::tolower(c); })
-         | std::ranges::to<std::string>();
+         | range_to<std::string>();
 }
 
 }  // namespace
@@ -701,7 +701,7 @@ void UciFrontEnd::Impl::writeOptions() const {
                 const std::string varsString =
                         validValues
                         | std::views::transform([](auto v) { return std::format("var {}", v); })
-                        | std::views::join_with(' ') | std::ranges::to<std::string>();
+                        | joinToString(" ");
                 writeUci(
                         "option name {} type combo default {} {}",
                         name,

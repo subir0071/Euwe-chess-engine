@@ -3,6 +3,7 @@
 #include "chess-engine-lib/Eval.h"
 #include "chess-engine-lib/Math.h"
 #include "chess-engine-lib/MoveOrdering.h"
+#include "chess-engine-lib/RangePatches.h"
 
 #include <algorithm>
 #include <execution>
@@ -162,7 +163,7 @@ void quiescePositions(std::vector<ScoredPosition>& scoredPositions) {
                 return maybePosition.has_value();
             })
             | std::views::transform([](const auto& maybePosition) { return maybePosition.value(); })
-            | std::ranges::to<std::vector<ScoredPosition>>();
+            | range_to<std::vector<ScoredPosition>>();
 
     std::println("Obtained {} quiesced positions", quiescedPositions.size());
 

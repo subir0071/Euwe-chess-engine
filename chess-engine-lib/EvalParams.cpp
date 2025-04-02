@@ -1,10 +1,11 @@
 #include "EvalParams.h"
 
 #include "Piece.h"
+#include "RangePatches.h"
 
+#include <format>
 #include <ranges>
 #include <sstream>
-#include <format>
 
 #include <cstring>
 
@@ -240,17 +241,15 @@ void writeTropismTable(
 
 template <std::size_t N>
 std::string arrayToString(const std::array<TaperedTerm, N>& valueArray) {
-    std::string inner = valueArray | std::ranges::views::transform(taperedTermToString)
-                      | std::ranges::views::join_with(std ::string(", "))
-                      | std::ranges::to<std::string>();
+    std::string inner =
+            valueArray | std::ranges::views::transform(taperedTermToString) | joinToString(", ");
     return "{" + inner + "}";
 }
 
 template <std::size_t N>
 std::string arrayToString(const std::array<EvalCalcT, N>& valueArray) {
-    std::string inner = valueArray | std::ranges::views::transform(evalCalcTToString)
-                      | std::ranges::views::join_with(std ::string(", "))
-                      | std::ranges::to<std::string>();
+    std::string inner =
+            valueArray | std::ranges::views::transform(evalCalcTToString) | joinToString(", ");
     return "{" + inner + "}";
 }
 

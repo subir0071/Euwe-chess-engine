@@ -1,5 +1,7 @@
 #include "LoadPositions.h"
 
+#include "chess-engine-lib/RangePatches.h"
+
 #include <execution>
 #include <fstream>
 #include <print>
@@ -124,5 +126,5 @@ std::vector<ScoredPosition> loadScoredPositions(
             });
 
     return std::ranges::views::join(nestedScoredPositions)
-         | std::ranges::to<std::vector<ScoredPosition>>();
+         | range_to<std::vector<ScoredPosition>>();
 }
