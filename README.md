@@ -1,7 +1,7 @@
 Euwe Chess Engine
 =================
 
-[![Tests][tests-badge][tests-link]
+[![Tests][tests-badge]][tests-link]
 
 **Author: Joost Houben**
 
