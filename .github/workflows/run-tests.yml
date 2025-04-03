@@ -1,10 +1,24 @@
-name: Build and test
+name: Run tests
 
 on: [push, pull_request]
 
 jobs:
+  pre_job:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+
+    - id: skip_check
+      uses: fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf
+      with:
+        concurrent_skipping: same_content_newer
+
   build_and_test:
-    name: Build and test (${{ matrix.os }}, ${{ matrix.config_name }})
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
+    name: ${{ matrix.os }}, ${{ matrix.config_name }}
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -53,30 +67,14 @@ jobs:
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         --preset ${{ steps.strings.outputs.os-name }}-${{ matrix.config_name }}
+        -DTARGETS_TO_BUILD="tests"
 
     - name: Build
       run: >
-        cmake --build ${{ steps.strings.outputs.build-output-dir }}
+        cmake
+        --build ${{ steps.strings.outputs.build-output-dir }}
+        --target tests
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: tests/tests
-
-    - name: Prepare artifact directory
-      if: matrix.config_name == 'clang-x64-release' && github.ref == 'refs/heads/main'
-      working-directory: .
-      run: |
-        mkdir artifacts
-        cp ${{ steps.strings.outputs.build-output-dir }}/chess-engine/Euwe* artifacts
-        cp LICENSE artifacts
-        cp NOTICE artifacts
-
-    - name: Archive binary
-      if: matrix.config_name == 'clang-x64-release' && github.ref == 'refs/heads/main'
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-      with:
-        name: Euwe-dev.${{ steps.strings.outputs.os-name }}
-        path: |
-          artifacts/LICENSE
-          artifacts/NOTICE
-          artifacts/Euwe*

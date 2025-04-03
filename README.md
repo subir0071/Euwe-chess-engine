@@ -1,7 +1,7 @@
 Euwe Chess Engine
 =================
 
-[![Euwe-chess-engine](https://github.com/JoostHouben/Euwe-chess-engine/actions/workflows/cmake-multi-platform.yml/badge.svg?branch=main)](https://github.com/JoostHouben/Euwe-chess-engine/actions/workflows/cmake-multi-platform.yml)
+[![Tests][tests-badge][tests-link]
 
 **Author: Joost Houben**
 
@@ -17,7 +17,7 @@ The latest stable release can be downloaded from the
 [releases page](https://github.com/JoostHouben/Euwe-chess-engine/releases/latest).
 
 You can also download pre-release builds from the CI artifacts
-[here](https://github.com/JoostHouben/Euwe-chess-engine/actions?query=is%3Asuccess+event%3Apush+branch%3Amain).
+[here](https://github.com/JoostHouben/Euwe-chess-engine/actions?query=is%3Asuccess+event%3Apush+branch%3Amain+workflow%3A%22Archive+Engine+Binaries%22).
 
 If you prefer to build the engine yourself, see the build instructions [below](#Build-instructions).
 
@@ -204,7 +204,13 @@ These dependencies are managed using [vcpkg](https://vcpkg.io/en/) (for C++) and
    you'll also need the 'C++ clang compiler for windows' component.
  - Build the solution. For best playing strength, build using the mode 'Windows clang x64 Release'.
 
-The project has been tested with Visual Studio 2022 Community Edition, version 17.13 (`_MSC_VER` 1943).
+The project has been tested with Visual Studio 2022 Community Edition, version 17.13 (`_MSC_VER`
+1943).
+
+The above instructions will compile not only the engine, but also the tests and the tuner. This
+requires installing dependencies for the tests and the tuner which may take a while. If you only
+want to build the engine, modify `TARGETS_TO_BUILD` in the CMakePresets.json file to just
+`"engine"`.
 
 #### Linux
 
@@ -212,12 +218,20 @@ The project has been tested with Visual Studio 2022 Community Edition, version 1
    and make sure that the `VCPKG_ROOT` environment variable is set (or modify the CMakePresets.json
    file to point to your VCPKG installation directly).
  - If needed, modify CMakePresets.json to match your build environment.
- - Run `cmake` with appropriate options. E.g., run `cmake --preset linux-x64-release` to build in
-   release mode.
+ - Run `cmake` with appropriate options. E.g., run
+   `cmake --preset linux-x64-release -DTARGETS_TO_BUILD="engine"` to build in release mode.
  - Run `cmake --build` on the output directory. E.g., `cmake --build out/build/linux-x64-release/`.
 
-The project has been tested with g++ 14.0. Note that in order to compile the tuner, you will need a
-Fortran compiler, such as GFortran; see
+The project has been tested with g++ 14.2, and clang 19 and 20.
+
+The above instructions will only compile the engine. To also compile the tests and/or the tuner, add
+the appropriate target to the `TARGETS_TO_BUILD` option. So to configure for building all 3 targets,
+run: `cmake --preset linux-x64-release -DTARGETS_TO_BUILD="engine;tests;tuner"`. This will trigger
+installation of the required dependencies using vcpkg.
+
+If `TARGETS_TO_BUILD` is not set, the default is to build all targets.
+
+Note that in order to compile the tuner, you will need a Fortran compiler, such as GFortran; see
 [installation instructions](https://fortran-lang.org/en/learn/os_setup/install_gfortran/). This is
 because the Tuner uses Ceres configured with SuiteSparse, which in turn depends on LAPACK, which is
 written in Fortran.
@@ -410,5 +424,8 @@ The author would like to thank:
 Euwe is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
 
 Euwe utilizes [Pyrrhic](https://github.com/AndyGrant/Pyrrhic) for Syzygy tablebase probing. Pyrrhic
-is licensed under the MIT license, see the [Pyrrhic license](chess-engine-lib/Pyrrhic/LICENSE) fo
+is licensed under the MIT license, see the [Pyrrhic license](chess-engine-lib/Pyrrhic/LICENSE) for
 details.
+
+[tests-badge]: https://github.com/JoostHouben/Euwe-chess-engine/actions/workflows/run-tests.yml/badge.svg?branch=main
+[tests-link]: https://github.com/JoostHouben/Euwe-chess-engine/actions/workflows/run-tests.yml
