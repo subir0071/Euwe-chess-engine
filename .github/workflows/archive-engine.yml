@@ -3,6 +3,7 @@ name: Archive Engine Binaries
 on:
   push:
     branches: [main]
+    tags: ['v*']
 
 jobs:
   archive_engine:
@@ -73,7 +74,7 @@ jobs:
           cp LICENSE artifacts
           cp NOTICE artifacts
 
-      - name: Archive binary
+      - name: Upload binary to CI artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: Euwe-dev.${{ matrix.config.os-name }}
@@ -81,3 +82,21 @@ jobs:
             artifacts/LICENSE
             artifacts/NOTICE
             artifacts/Euwe*
+
+      - name: Check for release tag
+        id: check-tag
+        run: |
+          if [[ ${{ github.event.ref }} =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "match=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Zip up artifacts
+        if: steps.check-tag.outputs.match == 'true'
+        run: |
+          zip Euwe-${{ github.ref_name }}.${{ matrix.config.os-name }}.zip artifacts/* -j
+
+      - name: Upload artifacts to release
+        if: steps.check-tag.outputs.match == 'true'
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda
+        with:
+          files: Euwe-${{ github.ref_name }}.${{ matrix.config.os-name }}.zip
