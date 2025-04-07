@@ -17,11 +17,13 @@ jobs:
         config:
           - {
               os: windows-latest,
-              preset: windows-clang-cl-release
+              preset: windows-clang-cl-release,
+              os-name: windows
             }
           - {
               os: ubuntu-latest,
-              preset: linux-clang-release
+              preset: linux-clang-release,
+              os-name: linux
             }
 
     steps:
@@ -74,7 +76,7 @@ jobs:
       - name: Archive binary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Euwe-dev.${{ matrix.config.os }}
+          name: Euwe-dev.${{ matrix.config.os-name }}
           path: |
             artifacts/LICENSE
             artifacts/NOTICE
