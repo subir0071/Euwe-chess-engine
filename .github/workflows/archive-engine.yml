@@ -74,7 +74,7 @@ jobs:
       - name: Archive binary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Euwe-dev.${{ steps.strings.outputs.os-name }}
+          name: Euwe-dev.${{ matrix.config.os }}
           path: |
             artifacts/LICENSE
             artifacts/NOTICE
