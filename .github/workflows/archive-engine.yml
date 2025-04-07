@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Install required packages
-        if: runner.os == 'Linux'
+        if: matrix.config.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install clang-19
@@ -93,10 +93,15 @@ jobs:
               echo "match=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Zip up artifacts
-        if: steps.check-tag.outputs.match == 'true'
+      - name: Zip up artifacts (Linux)
+        if: steps.check-tag.outputs.match == 'true' && matrix.config.os == 'ubuntu-latest'
         run: |
           zip Euwe-${{ github.ref_name }}.${{ matrix.config.os-name }}.zip artifacts/* -j
+
+      - name: Zip up artifacts (Windows)
+        if: steps.check-tag.outputs.match == 'true' && matrix.config.os == 'windows-latest'
+        run: |
+          Compress-Archive artifacts/* Euwe-${{ github.ref_name }}.${{ matrix.config.os-name }}.zip
 
       - name: Upload artifacts to release
         if: steps.check-tag.outputs.match == 'true'
