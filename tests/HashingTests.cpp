@@ -2,6 +2,8 @@
 
 #include "MyGTest.h"
 
+#include <format>
+#include <ostream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -122,6 +124,11 @@ void findPawnKingHashCollisions(
 struct HashCollisionTestConfig {
     std::string fen;
     int depth;
+
+    friend std::ostream& operator<<(std::ostream& os, const HashCollisionTestConfig& config) {
+        os << std::format("{{.fen = \"{}\", .depth = {}}}", config.fen, config.depth);
+        return os;
+    }
 };
 
 class HashCollisionTests : public ::testing::TestWithParam<HashCollisionTestConfig> {};
@@ -174,15 +181,24 @@ std::string hashTestName(const ::testing::TestParamInfo<HashCollisionTestConfig>
     return fenName + "_depth" + std::to_string(info.param.depth);
 }
 
-const auto testCases = ::testing::Values(
-        HashCollisionTestConfig{.fen = getStartingPositionFen(), .depth = 4},
+const auto testCasesFast = ::testing::Values(
+        HashCollisionTestConfig{.fen = getStartingPositionFen(), .depth = 3},
         HashCollisionTestConfig{.fen = kKiwipeteFen, .depth = 3},
-        HashCollisionTestConfig{.fen = kPosition3Fen, .depth = 5},
-        HashCollisionTestConfig{.fen = kPosition4Fen, .depth = 4},
+        HashCollisionTestConfig{.fen = kPosition3Fen, .depth = 4},
+        HashCollisionTestConfig{.fen = kPosition4Fen, .depth = 3},
         HashCollisionTestConfig{.fen = kPosition5Fen, .depth = 3},
         HashCollisionTestConfig{.fen = kPosition6Fen, .depth = 3});
 
-INSTANTIATE_TEST_SUITE_P(HashCollisionTests, HashCollisionTests, testCases, hashTestName);
+const auto testCasesSlow = ::testing::Values(
+        HashCollisionTestConfig{.fen = getStartingPositionFen(), .depth = 4},
+        HashCollisionTestConfig{.fen = kPosition3Fen, .depth = 5},
+        HashCollisionTestConfig{.fen = kPosition4Fen, .depth = 4});
+
+INSTANTIATE_TEST_SUITE_P(HashCollisionTestsFast, HashCollisionTests, testCasesFast, hashTestName);
+
+#ifdef NDEBUG
+INSTANTIATE_TEST_SUITE_P(HashCollisionTestsSlow, HashCollisionTests, testCasesSlow, hashTestName);
+#endif
 
 TEST(HashingTests, NullMoveEnPassantHashing) {
     const HashT withEnPassantTarget =
