@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ ! -f out/build/linux-clang-debug/compile_commands.json ]; then
+    echo "compile_commands.json not found. Run: cmake --preset linux-clang-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    exit 1
+fi
+
 file_list=$(find chess-engine chess-engine-lib tests tuner \
   ! -path "chess-engine-lib/Pyrrhic/*" \
   -type f \( -name "*.cpp" -o -name "*.h" \))
