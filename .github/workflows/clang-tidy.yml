@@ -17,11 +17,26 @@ jobs:
           concurrent_skipping: same_content_newer
 
   lint_check:
-    needs: pre_job
-    # Always run on main to ensure that the cache is populated and accessible to all other refs.
-    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
     name: Run
-    runs-on: ubuntu-latest
+
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
+    runs-on: ${{ matrix.config.os }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        config:
+          - {
+              os: ubuntu-latest,
+              preset: linux-clang-debug,
+              vcpkg_cache_triplet: x64-linux
+            }
+
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-binary-cache,read
+
     steps:
 
       - name: Checkout repository
@@ -40,10 +55,24 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@5e0cab206a5ea620130caf672fce3e4a6b5666a1
 
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "vcpkg-cache-key=vcpkg-${{ matrix.config.vcpkg_cache_triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached VCPKG binaries
+        id: cache-vcpkg-binaries
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+           path: |
+              ${{ github.workspace }}/vcpkg-binary-cache
+           key: ${{ steps.strings.outputs.vcpkg-cache-key }}
+
       - name: CMake configure
         uses: lukka/run-cmake@af1be47fd7c933593f687731bc6fdbee024d3ff4
         with:
-          configurePreset: linux-clang-debug
+          configurePreset: ${{ matrix.config.preset }}
           configurePresetAdditionalArgs: "['-DCMAKE_EXPORT_COMPILE_COMMANDS=ON']"
 
       - name: Run clang-tidy script

@@ -1,0 +1,167 @@
+name: Create Caches
+
+on: [push, pull_request]
+
+jobs:
+  pre_job:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf
+        with:
+          cancel_others: true
+          concurrent_skipping: same_content_newer
+
+  syzygy_cache:
+    name: Cache Syzygy
+
+    needs: pre_job
+    # Always run on main to ensure that the cache is populated and accessible to all other refs.
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Cache Syzygy
+        id: cache-syzygy
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+           path: |
+              3-4-5-wdl/
+              3-4-5-dtz/
+           key: syzygy-3-4-5-wdl-dtz
+           enableCrossOsArchive: true
+           
+      - name: Download Syzygy 3-4-5 if needed (Linux)
+        if: steps.cache-syzygy.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          wget --no-verbose -r -nH --cut-dirs=2 --no-parent --reject="index.html*" -e robots=off https://tablebase.lichess.ovh/tables/standard/3-4-5-wdl/
+          wget --no-verbose -r -nH --cut-dirs=2 --no-parent --reject="index.html*" -e robots=off https://tablebase.lichess.ovh/tables/standard/3-4-5-dtz/
+
+  msan_libcxx_cache:
+    name: Cache MSan libc++
+
+    needs: pre_job
+    # Always run on main to ensure that the cache is populated and accessible to all other refs.
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Cache MSan libc++
+        id: cache-msan-libcxx
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+           path: |
+              toolchains/llvm-project/build/msan/include/
+              toolchains/llvm-project/build/msan/lib/
+           key: msan-libcxx-${{ hashFiles('toolchains/build-msan-libcxx.sh') }}
+
+      - name: Get CMake
+        if: steps.cache-msan-libcxx.outputs.cache-hit != 'true'
+        uses: lukka/get-cmake@56d043d188c3612951d8755da8f4b709ec951ad6
+
+      - name: Build MSan libc++
+        if: steps.cache-msan-libcxx.outputs.cache-hit != 'true'
+        working-directory: toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install clang-19 libclang-19-dev llvm-19-dev
+          bash build-msan-libcxx.sh
+
+  vcpkg_cache:
+    name: Cache vcpkg binaries ${{ matrix.config.vcpkg_cache_triplet }}
+
+    needs: pre_job
+    # Always run on main to ensure that the cache is populated and accessible to all other refs.
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
+    runs-on: ${{ matrix.config.os }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        config:
+          - {
+              os: windows-latest,
+              preset: windows-msvc-debug,
+              vcpkg_cache_triplet: x64-windows
+            }
+          - {
+              os: ubuntu-latest,
+              preset: linux-clang-debug,
+              vcpkg_cache_triplet: x64-linux
+            }
+          - {
+              os: ubuntu-latest,
+              preset: linux-msan,
+              vcpkg_cache_triplet: x64-linux-msan
+            }
+
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-binary-cache,readwrite
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "vcpkg-cache-key=vcpkg-${{ matrix.config.vcpkg_cache_triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache VCPKG binaries
+        id: cache-vcpkg-binaries
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+           path: |
+              ${{ github.workspace }}/vcpkg-binary-cache
+           key: ${{ steps.strings.outputs.vcpkg-cache-key }}
+
+      - name: Install required packages
+        if: ${{ runner.os == 'Linux' && steps.cache-vcpkg-binaries.outputs.cache-hit != 'true' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install clang-19
+          clang++-19 --version
+
+      - name: Get CMake
+        if: steps.cache-vcpkg-binaries.outputs.cache-hit != 'true'
+        uses: lukka/get-cmake@56d043d188c3612951d8755da8f4b709ec951ad6
+      
+      - name: Setup vcpkg
+        if: steps.cache-vcpkg-binaries.outputs.cache-hit != 'true'
+        uses: lukka/run-vcpkg@5e0cab206a5ea620130caf672fce3e4a6b5666a1
+
+      - name: Restore cached MSan libc++
+        if: ${{ steps.cache-vcpkg-binaries.outputs.cache-hit != 'true' && matrix.config.preset == 'linux-msan' }}
+        id: cache-msan-libcxx
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+           path: |
+              toolchains/llvm-project/build/msan/include/
+              toolchains/llvm-project/build/msan/lib/
+           key: msan-libcxx-${{ hashFiles('toolchains/build-msan-libcxx.sh') }}
+
+      - name: Build MSan libc++
+        if: ${{ steps.cache-vcpkg-binaries.outputs.cache-hit != 'true' && matrix.config.preset == 'linux-msan' && steps.cache-msan-libcxx.outputs.cache-hit != 'true' }}
+        working-directory: toolchains
+        run: |
+          sudo apt-get install libclang-19-dev llvm-19-dev
+          bash build-msan-libcxx.sh
+
+      - name: CMake configure
+        if: steps.cache-vcpkg-binaries.outputs.cache-hit != 'true'
+        uses: lukka/run-cmake@af1be47fd7c933593f687731bc6fdbee024d3ff4
+        with:
+          configurePreset: ${{ matrix.config.preset }}

@@ -17,10 +17,10 @@ jobs:
           concurrent_skipping: same_content_newer
 
   build_and_test:
-    needs: pre_job
-    # Always run on main to ensure that the cache is populated and accessible to all other refs.
-    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
     name: ${{ matrix.config.preset }}
+
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ${{ matrix.config.os }}
 
     strategy:
@@ -32,42 +32,53 @@ jobs:
           # Windows MSVC
           - {
               os: windows-latest,
-              preset: windows-msvc-debug
+              preset: windows-msvc-debug,
+              vcpkg_cache_triplet: x64-windows
             }
           - {
               os: windows-latest,
-              preset: windows-msvc-release
+              preset: windows-msvc-release,
+              vcpkg_cache_triplet: x64-windows
             }
 
           # Windows clang-cl
           - {
               os: windows-latest,
-              preset: windows-clang-cl-release
+              preset: windows-clang-cl-release,
+              vcpkg_cache_triplet: x64-windows
             }
 
           # Linux clang
           - {
               os: ubuntu-latest,
-              preset: linux-clang-debug
+              preset: linux-clang-debug,
+              vcpkg_cache_triplet: x64-linux
             }
           - {
               os: ubuntu-latest,
-              preset: linux-clang-release
+              preset: linux-clang-release,
+              vcpkg_cache_triplet: x64-linux
             }
 
           # Linux sanitizers
           - {
               os: ubuntu-latest,
-              preset: linux-asan-ubsan
+              preset: linux-asan-ubsan,
+              vcpkg_cache_triplet: x64-linux
             }
           - {
               os: ubuntu-latest,
-              preset: linux-tsan
+              preset: linux-tsan,
+              vcpkg_cache_triplet: x64-linux
             }
           - {
               os: ubuntu-latest,
-              preset: linux-msan
+              preset: linux-msan,
+              vcpkg_cache_triplet: x64-linux-msan
             }
+
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-binary-cache,read
 
     steps:
       - name: Checkout repository
@@ -80,11 +91,6 @@ jobs:
           sudo apt-get install clang-19
           clang++-19 --version
 
-      - name: Install clang-dev
-        if: matrix.config.preset == 'linux-msan'
-        run: |
-          sudo apt-get install libclang-19-dev llvm-19-dev
-
       - name: Get CMake
         uses: lukka/get-cmake@56d043d188c3612951d8755da8f4b709ec951ad6
 
@@ -96,6 +102,7 @@ jobs:
         shell: bash
         run: |
           echo "build-output-dir=${{ github.workspace }}/out/build/${{ matrix.config.preset }}/src" >> "$GITHUB_OUTPUT"
+          echo "vcpkg-cache-key=vcpkg-${{ matrix.config.vcpkg_cache_triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore cached MSan libc++
         if: matrix.config.preset == 'linux-msan'
@@ -105,13 +112,22 @@ jobs:
            path: |
               toolchains/llvm-project/build/msan/include/
               toolchains/llvm-project/build/msan/lib/
-           key: key-msan-libcxx-clang_19-llvm_git_sha_923a5c4f83d2b3675bb88e9fe441daeaa4d69488
+           key: msan-libcxx-${{ hashFiles('toolchains/build-msan-libcxx.sh') }}
 
       - name: Build MSan libc++
-        if: matrix.config.preset == 'linux-msan' && steps.cache-msan-libcxx.outputs.cache-hit != 'true'
+        if: ${{ matrix.config.preset == 'linux-msan' && steps.cache-msan-libcxx.outputs.cache-hit != 'true' }}
         working-directory: toolchains
         run: |
+          sudo apt-get install libclang-19-dev llvm-19-dev
           bash build-msan-libcxx.sh
+
+      - name: Restore cached VCPKG binaries
+        id: cache-vcpkg-binaries
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+           path: |
+              ${{ github.workspace }}/vcpkg-binary-cache
+           key: ${{ steps.strings.outputs.vcpkg-cache-key }}
 
       - name: CMake configure & build
         uses: lukka/run-cmake@af1be47fd7c933593f687731bc6fdbee024d3ff4
