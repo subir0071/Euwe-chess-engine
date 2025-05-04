@@ -322,8 +322,9 @@ void solveParams(
 void optimize(
         std::array<double, kNumEvalParams>& paramsDouble,
         const std::vector<ScoredPosition>& scoredPositions,
-        const bool fixPhaseValues) {
-    double scaleParam = 400;
+        const bool fixPhaseValues,
+        const bool fixScale) {
+    double scaleParam = 309;
 
     ceres::Problem problem;
     addResiduals(
@@ -333,10 +334,12 @@ void optimize(
             /*subSampleRate*/ 1,
             problem);
 
-    solveScale(problem, scaleParam, paramsDouble);
+    if (!fixScale) {
+        solveScale(problem, scaleParam, paramsDouble);
+    }
 
     std::println("Scale param: {}", scaleParam);
 
-    const bool useTrustRegionMethod = scoredPositions.size() < 1'000'000;
+    const bool useTrustRegionMethod = scoredPositions.size() < 2'000'000;
     solveParams(problem, scaleParam, paramsDouble, fixPhaseValues, useTrustRegionMethod);
 }
