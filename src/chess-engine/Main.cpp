@@ -23,7 +23,7 @@ int main() try {
 
         if (command == "uci") {
             Engine engine;
-            UciFrontEnd uciFrontEnd(engine, "candidate-pst");
+            UciFrontEnd uciFrontEnd(engine, "passed-pawn-obstruction");
             uciFrontEnd.run();
             break;
         } else if (command == "perft") {

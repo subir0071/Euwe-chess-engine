@@ -13,7 +13,7 @@
 #include <utility>
 
 namespace {
-constexpr std::size_t kPawnKingHashTableSizeBytes = 4ULL * 1024 * 1024;
+constexpr std::size_t kPawnKingHashTableSizeBytes = 3ULL * 1024 * 1024;
 constexpr std::size_t kPawnKingHashTableEntries =
         kPawnKingHashTableSizeBytes / sizeof(PawnKingEvalInfo);
 
@@ -140,6 +140,24 @@ FORCE_INLINE void updateTaperedTerm(
     if constexpr (CalcJacobians) {
         eval.early.grad[params.getParamIndex(term.early)] += weight;
         eval.late.grad[params.getParamIndex(term.late)] += weight;
+    }
+}
+
+template <bool CalcJacobians>
+FORCE_INLINE void updateTaperedProductTerm(
+        const Evaluator::EvalCalcParams& params,
+        const TaperedTerm& factor1,
+        const TaperedTerm& factor2,
+        TaperedEvaluation<CalcJacobians>& eval) {
+    eval.early.value += factor1.early * factor2.early;
+    eval.late.value += factor1.late * factor2.late;
+
+    if constexpr (CalcJacobians) {
+        eval.early.grad[params.getParamIndex(factor1.early)] += factor2.early;
+        eval.late.grad[params.getParamIndex(factor1.late)] += factor2.late;
+
+        eval.early.grad[params.getParamIndex(factor2.early)] += factor1.early;
+        eval.late.grad[params.getParamIndex(factor2.late)] += factor1.late;
     }
 }
 
@@ -613,6 +631,54 @@ FORCE_INLINE void evaluateAttackDefend(
 }
 
 template <bool CalcJacobians>
+FORCE_INLINE void evaluatePasserObstructions(
+        const Evaluator::EvalCalcParams& params,
+        const GameState& gameState,
+        const BoardControl& boardControl,
+        BitBoard passedPawns,
+        const Side side,
+        PiecePositionEvaluation<CalcJacobians>& result) {
+    const BitBoard& ownControl   = boardControl.sideControl[(int)side];
+    const BitBoard& enemyControl = boardControl.sideControl[(int)nextSide(side)];
+
+    const BitBoard sacrificialControl    = enemyControl & ownControl;
+    const BitBoard nonSacrificialControl = enemyControl & ~ownControl;
+
+    const BitBoard& enemyOccupancy = gameState.getSideOccupancy(nextSide(side));
+
+    passedPawns &= gameState.getPieceBitBoard(side, Piece::Pawn);
+    while (passedPawns != BitBoard::Empty) {
+        const BoardPosition position = popFirstSetPosition(passedPawns);
+        const BitBoard forwardMask   = getPawnForwardMask(position, side);
+
+        const bool mechanicalObstruction = (forwardMask & enemyOccupancy) != BitBoard::Empty;
+        const bool dynamicObstruction    = (forwardMask & nonSacrificialControl) != BitBoard::Empty;
+        const bool sacrificialObstruction = (forwardMask & sacrificialControl) != BitBoard::Empty;
+
+        const int pstIndex = (int)((*result.pstIndex)[(int)position]);
+        const TaperedTerm& passedPawnPstTerm =
+                params.pieceSquareTables[EvalParams::kPassedPawnPstIdx][pstIndex];
+
+        if (mechanicalObstruction) {
+            updateTaperedProductTerm(
+                    params,
+                    passedPawnPstTerm,
+                    params.passerMechanicalObstructionFactor,
+                    result.eval);
+        } else if (dynamicObstruction) {
+            updateTaperedProductTerm(
+                    params, passedPawnPstTerm, params.passerDynamicObstructionFactor, result.eval);
+        } else if (sacrificialObstruction) {
+            updateTaperedProductTerm(
+                    params,
+                    passedPawnPstTerm,
+                    params.passerSacrificialOstructionFactor,
+                    result.eval);
+        }
+    }
+}
+
+template <bool CalcJacobians>
 FORCE_INLINE void modifyForFactor(
         const Evaluator::EvalCalcParams& params,
         const EvalCalcT& factor,
@@ -789,7 +855,8 @@ void evaluatePawnKingForSide(
         const BitBoard enemyKingArea,
         const BitBoard blockersForOwnCandidates,
         PiecePositionEvaluation<CalcJacobians>& result,
-        bool& hasConditionallyUnstoppablePawn) {
+        bool& hasConditionallyUnstoppablePawn,
+        BitBoard& passedPawns) {
     const Side enemySide = nextSide(side);
 
     const BitBoard ownPawns   = gameState.getPieceBitBoard(side, Piece::Pawn);
@@ -858,6 +925,8 @@ void evaluatePawnKingForSide(
                     result.eval,
                     filePassedPawnWeight[passedPawnWeightIdx - 1]
                             + filePassedPawnWeight[passedPawnWeightIdx + 1]);
+
+            passedPawns |= position;
         } else if (isCandidate) {
             pstIdx     = EvalParams::kCandidatePassedPawnPstIdx;
             tropismIdx = EvalParams::kCandidatePassedPawnTropismIdx;
@@ -947,7 +1016,9 @@ FORCE_INLINE void evaluatePawnKing(
         const BitBoard blackKingArea,
         PawnKingEvalHashTable& pawnKingEvalHashTable,
         PiecePositionEvaluation<CalcJacobians>& whiteResult,
-        PiecePositionEvaluation<CalcJacobians>& blackResult) {
+        PiecePositionEvaluation<CalcJacobians>& blackResult,
+        BitBoard& passedPawns) {
+    passedPawns = BitBoard::Empty;
     bool whiteHasConditionallyUnstoppablePawn{};
     bool blackHasConditionallyUnstoppablePawn{};
 
@@ -965,7 +1036,8 @@ FORCE_INLINE void evaluatePawnKing(
             blackKingArea,
             blockersForWhiteCandidates,
             whiteResult,
-            whiteHasConditionallyUnstoppablePawn);
+            whiteHasConditionallyUnstoppablePawn,
+            passedPawns);
 
     evaluatePawnKingForSide(
             params,
@@ -978,12 +1050,14 @@ FORCE_INLINE void evaluatePawnKing(
             whiteKingArea,
             blockersForBlackCandidates,
             blackResult,
-            blackHasConditionallyUnstoppablePawn);
+            blackHasConditionallyUnstoppablePawn,
+            passedPawns);
 
     if (!pawnKingEvalHashTable.empty()) {
         const PawnKingEvalInfo pawnKingEvalInfo{
-                .earlyEval = whiteResult.eval.early.value - blackResult.eval.early.value,
-                .lateEval  = whiteResult.eval.late.value - blackResult.eval.late.value,
+                .passedPawns = passedPawns,
+                .earlyEval   = whiteResult.eval.early.value - blackResult.eval.early.value,
+                .lateEval    = whiteResult.eval.late.value - blackResult.eval.late.value,
 
                 .phaseMaterial = whiteResult.phaseMaterial.value + blackResult.phaseMaterial.value,
 
@@ -1070,7 +1144,8 @@ FORCE_INLINE void evaluatePawnKingOrRetrieve(
         const BitBoard blackKingArea,
         PawnKingEvalHashTable& pawnKingEvalHashTable,
         PiecePositionEvaluation<CalcJacobians>& whiteResult,
-        PiecePositionEvaluation<CalcJacobians>& blackResult) {
+        PiecePositionEvaluation<CalcJacobians>& blackResult,
+        BitBoard& passedPawns) {
     if constexpr (!CalcJacobians) {
         if (!pawnKingEvalHashTable.empty()) {
             const auto retrievedInfo = pawnKingEvalHashTable.probe(gameState.getPawnKingHash());
@@ -1085,6 +1160,8 @@ FORCE_INLINE void evaluatePawnKingOrRetrieve(
                         *retrievedInfo,
                         whiteResult,
                         blackResult);
+
+                passedPawns = retrievedInfo->passedPawns;
 
                 return;
             }
@@ -1101,7 +1178,8 @@ FORCE_INLINE void evaluatePawnKingOrRetrieve(
             blackKingArea,
             pawnKingEvalHashTable,
             whiteResult,
-            blackResult);
+            blackResult,
+            passedPawns);
 }
 
 [[nodiscard]] FORCE_INLINE ParamGradient<true> getMaxPhaseMaterialGradient(
@@ -1280,6 +1358,7 @@ template <bool CalcJacobians>
             blackPiecePositionEval.pstIndex,
             blackPiecePositionEval.pstIndexKing);
 
+    BitBoard passedPawns{};
     evaluatePawnKingOrRetrieve(
             params,
             gameState,
@@ -1290,7 +1369,8 @@ template <bool CalcJacobians>
             blackKingArea,
             pawnKingEvalHashTable,
             whitePiecePositionEval,
-            blackPiecePositionEval);
+            blackPiecePositionEval,
+            passedPawns);
 
     evaluatePiecePositionsForSide(
             params,
@@ -1312,8 +1392,12 @@ template <bool CalcJacobians>
             blackPiecePositionEval);
 
     evaluateAttackDefend(params, gameState, boardControl, Side::White, whitePiecePositionEval.eval);
-
     evaluateAttackDefend(params, gameState, boardControl, Side::Black, blackPiecePositionEval.eval);
+
+    evaluatePasserObstructions(
+            params, gameState, boardControl, passedPawns, Side::White, whitePiecePositionEval);
+    evaluatePasserObstructions(
+            params, gameState, boardControl, passedPawns, Side::Black, blackPiecePositionEval);
 
     const EvalCalcT tempoFactor = gameState.getSideToMove() == Side::White ? 1.f : -1.f;
     updateTaperedTerm(params, params.tempoBonus, whitePiecePositionEval.eval, tempoFactor);

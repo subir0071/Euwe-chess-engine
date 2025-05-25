@@ -49,6 +49,10 @@ struct EvalParams {
     TaperedTerm doubledPawnPenalty;
     TaperedTerm isolatedPawnPenalty;
 
+    TaperedTerm passerMechanicalObstructionFactor;
+    TaperedTerm passerDynamicObstructionFactor;
+    TaperedTerm passerSacrificialOstructionFactor;
+
     std::array<TaperedTerm, 9> bishopPawnSameColorAdjustment;
     std::array<TaperedTerm, 9> bishopEnemyPawnSameColorAdjustment;
 
