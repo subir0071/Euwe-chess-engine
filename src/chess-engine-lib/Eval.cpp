@@ -221,29 +221,49 @@ FORCE_INLINE void updateMobilityEvaluation(
 }
 
 template <bool CalcJacobians>
-FORCE_INLINE void updateForVirtualKingMobility(
+FORCE_INLINE void updateForChecks(
         const Evaluator::EvalCalcParams& params,
         const GameState& gameState,
+        const BoardControl& boardControl,
         const Side side,
         const BoardPosition kingPosition,
         TaperedEvaluation<CalcJacobians>& eval) {
+    const BitBoard anyOccupancy = gameState.getAnyOccupancy();
 
-    const BitBoard ownOccupancy = gameState.getSideOccupancy(side);
+    const BitBoard virtualKingKnightControl =
+            getPieceControlledSquares(Piece::Knight, kingPosition, anyOccupancy);
+    const BitBoard virtualKingBishopControl =
+            getPieceControlledSquares(Piece::Bishop, kingPosition, anyOccupancy);
+    const BitBoard virtualKingRookControl =
+            getPieceControlledSquares(Piece::Rook, kingPosition, anyOccupancy);
+    const BitBoard virtualKingQueenControl = virtualKingBishopControl | virtualKingRookControl;
 
-    // Consider all of our own pieces as blockers, but for the enemy pieces we only consider pawns.
-    // This is to account for the fact that the other enemy pieces are likely mobile and so should
-    // not be relied upon to protect the king from sliding attacks.
-    const BitBoard blockers =
-            ownOccupancy | gameState.getPieceBitBoard(nextSide(side), Piece::Pawn);
+    const BitBoard& enemyKnightControl =
+            boardControl.pieceTypeControl[(int)nextSide(side)][(int)Piece::Knight];
+    const BitBoard& enemyBishopControl =
+            boardControl.pieceTypeControl[(int)nextSide(side)][(int)Piece::Bishop];
+    const BitBoard& enemyRookControl =
+            boardControl.pieceTypeControl[(int)nextSide(side)][(int)Piece::Rook];
+    const BitBoard& enemyQueenControl =
+            boardControl.pieceTypeControl[(int)nextSide(side)][(int)Piece::Queen];
 
-    // We're only interested in squares from which an enemy slider could attack the king, so we
-    // exclude the occupied squares themselves.
-    const BitBoard virtualKingControl =
-            getPieceControlledSquares(Piece::Queen, kingPosition, blockers) & ~blockers;
+    const BitBoard& ownControl = boardControl.sideControl[(int)side];
 
-    const int virtualKingMobility = popCount(virtualKingControl);
+    const BitBoard checks = (enemyKnightControl & virtualKingKnightControl)
+                          | (enemyBishopControl & virtualKingBishopControl)
+                          | (enemyRookControl & virtualKingRookControl)
+                          | (enemyQueenControl & virtualKingQueenControl);
 
-    updateTaperedTerm(params, params.kingVirtualMobilityPenalty, eval, -virtualKingMobility);
+    const BitBoard defendedChecks   = checks & ownControl;
+    const BitBoard undefendedChecks = checks & ~ownControl;
+
+    const int defendedChecksIdx =
+            min(popCount(defendedChecks), (int)params.defendedChecksAdjustment.size() - 1);
+    const int undefendedChecksIdx =
+            min(popCount(undefendedChecks), (int)params.undefendedChecksAdjustment.size() - 1);
+
+    updateTaperedTerm(params, params.defendedChecksAdjustment[defendedChecksIdx], eval, 1);
+    updateTaperedTerm(params, params.undefendedChecksAdjustment[undefendedChecksIdx], eval, 1);
 }
 
 static constexpr auto kTropisms = []() {
@@ -575,9 +595,6 @@ void evaluatePiecePositionsForSide(
     {
         // no mobility bonus for king
 
-        updateForVirtualKingMobility<CalcJacobians>(
-                params, gameState, side, ownKingPosition, result.eval);
-
         // Note king attack data between kings was calculated during initialization.
 
         // King safety.
@@ -593,6 +610,9 @@ void evaluatePiecePositionsForSide(
                 params, params.numKingAttackersAdjustment[numKingAttackersIdx], result.eval, 1);
 
         updateForPins(params, gameState, side, ownKingPosition, result.eval);
+
+        updateForChecks<CalcJacobians>(
+                params, gameState, boardControl, side, ownKingPosition, result.eval);
     }
 }
 

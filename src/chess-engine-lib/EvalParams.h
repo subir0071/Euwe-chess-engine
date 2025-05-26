@@ -72,8 +72,6 @@ struct EvalParams {
     std::array<TaperedTerm, 9> rookPawnAdjustment;
     std::array<TaperedTerm, 9> queenPawnAdjustment;
 
-    TaperedTerm kingVirtualMobilityPenalty;
-
     std::array<TaperedTerm, kNumPieceTypes> mobilityBonus;
 
     std::array<std::array<TaperedTerm, 9>, kNumPieceTypes> safeMobilityAdjustment;
@@ -101,6 +99,9 @@ struct EvalParams {
     TaperedTerm kingFlankOpenFileAdjustment;
 
     TaperedTerm passedPawnOutsideKingSquare;
+
+    std::array<TaperedTerm, 7> defendedChecksAdjustment;
+    std::array<TaperedTerm, 7> undefendedChecksAdjustment;
 
     [[nodiscard]] FORCE_INLINE std::size_t getParamIndex(const EvalCalcT& param) const {
         const std::byte* thisByte   = reinterpret_cast<const std::byte*>(this);
