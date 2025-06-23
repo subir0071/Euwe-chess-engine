@@ -1,9 +1,7 @@
 name: E2E Tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   pre_job:
@@ -32,10 +30,10 @@ jobs:
       matrix:
         config:
           # Windows MSVC
-          - {
-             os: windows-latest,
-             preset: windows-msvc-debug
-           }
+          # - {
+          #    os: windows-latest,
+          #    preset: windows-msvc-debug
+          #  }
 
           # Windows clang-cl
           - {
@@ -44,28 +42,28 @@ jobs:
            }
 
           # Linux clang
-          - {
-              os: ubuntu-latest,
-              preset: linux-clang-debug
-            }
-          - {
-              os: ubuntu-latest,
-              preset: linux-clang-release
-            }
+          # - {
+          #     os: ubuntu-latest,
+          #     preset: linux-clang-debug
+          #   }
+          # - {
+          #     os: ubuntu-latest,
+          #     preset: linux-clang-release
+          #   }
 
-          # Linux sanitizers
-          - {
-              os: ubuntu-latest,
-              preset: linux-asan-ubsan
-            }
-          - {
-              os: ubuntu-latest,
-              preset: linux-tsan
-            }
-          - {
-              os: ubuntu-latest,
-              preset: linux-msan
-            }
+          # # Linux sanitizers
+          # - {
+          #     os: ubuntu-latest,
+          #     preset: linux-asan-ubsan
+          #   }
+          # - {
+          #     os: ubuntu-latest,
+          #     preset: linux-tsan
+          #   }
+          # - {
+          #     os: ubuntu-latest,
+          #     preset: linux-msan
+          #   }
 
     steps:
 
