@@ -118,6 +118,9 @@ jobs:
         run: |
           bash build-msan-libcxx.sh
 
+      - name: Get Clang version
+        run: clang++ --version
+        
       - name: CMake configure & build
         uses: lukka/run-cmake@af1be47fd7c933593f687731bc6fdbee024d3ff4
         with:
