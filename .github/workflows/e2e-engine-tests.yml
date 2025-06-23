@@ -124,13 +124,19 @@ jobs:
       - name: Get Clang-cl version - before clang version upgrade to 19
         run: clang-cl --version
           
-      - name: Install LLVM Clang 19 on Windows
-        shell: powershell
-        run: |
-         $ErrorActionPreference = "Stop"
-         Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/LLVM-19.1.7-win64.exe" -OutFile "llvm.exe"
-         Start-Process -FilePath .\llvm.exe -ArgumentList "/S", "/D=C:\LLVM" -Wait
-         echo "C:\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      # - name: Install LLVM Clang 19 on Windows
+      #   shell: powershell
+      #   run: |
+      #    $ErrorActionPreference = "Stop"
+      #    Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/LLVM-19.1.7-win64.exe" -OutFile "llvm.exe"
+      #    Start-Process -FilePath .\llvm.exe -ArgumentList "/S", "/D=C:\LLVM" -Wait
+      #    echo "C:\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: 19.1.7
+          platform: x64
 
 
       - name: Get Clang version - after clang version upgrade to 19
