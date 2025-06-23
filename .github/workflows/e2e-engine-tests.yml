@@ -117,6 +117,15 @@ jobs:
         working-directory: toolchains
         run: |
           bash build-msan-libcxx.sh
+          
+      - name: Install LLVM Clang 19 on Windows
+        shell: powershell
+        run: |
+         $ErrorActionPreference = "Stop"
+         Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.0.0-rc1/LLVM-19.0.0-rc1-win64.exe" -OutFile "llvm.exe"
+         Start-Process -FilePath .\llvm.exe -ArgumentList "/S", "/D=C:\LLVM" -Wait
+         echo "C:\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          
 
       - name: Get Clang version
         run: clang++ --version
